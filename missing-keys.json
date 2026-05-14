@@ -1,0 +1,8 @@
+{
+  "error.uploadFailed": "Upload failed: ",
+  "error.failedToUploadMediaFile": "Failed to upload media file",
+  "error.artistNameIsRequired": "Artist name is required",
+  "error.artistNameMustBeAtLeast2Characters": "Artist name must be at least 2 characters",
+  "error.labelNameIsRequired": "Label name is required",
+  "error.labelNameMustBeAtLeast2Characters": "Label name must be at least 2 characters"
+}

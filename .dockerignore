@@ -1,0 +1,30 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Build
+.next
+out
+
+# Testing
+tests
+coverage
+jest.config.ts
+playwright.config.ts
+
+# Dev files
+*.md
+.env*
+.git
+.gitignore
+.vscode
+
+# Docker
+Dockerfile
+docker-compose.yml
+nginx.conf
+
+# IDE
+.idea
+*.swp
+*.swo

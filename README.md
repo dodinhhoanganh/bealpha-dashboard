@@ -1,33 +1,193 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BEALPHA Dashboard
 
-## Getting Started
+A modern music label management dashboard for BEALPHA MUSIC GROUP LLC. Built with Next.js, React, Material UI, and PostgreSQL.
 
-First, run the development server:
+## Features
 
-```bash
+✨ **Modern UI**
+- Material Design dark theme (black/white/gray)
+- Responsive layout with Material UI components
+- Professional typography with Roboto font
+- Material Design icons throughout
+
+📊 **Analytics Dashboard**
+- Playlist performance visualization (line charts)
+- Play duration analytics (bar charts)
+- Skip rate analysis (pie charts)
+- Real-time metrics
+
+🎵 **Release Management**
+- Upcoming releases tracker
+- Recent releases timeline
+- Status tracking (pending/scheduled/released/rejected)
+- Cover art display
+
+🗄️ **Database Integration**
+- PostgreSQL backend with Prisma ORM
+- RESTful API endpoints
+- Release, Playlist, Analytics data models
+- Historical performance tracking
+
+## Quick Start
+
+### 1. Setup (5 minutes)
+
+```powershell
+# Update .env.local with your PostgreSQL password
+# DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/bealpha_db"
+
+# Install dependencies
+npm install
+
+# Initialize database
+npm run db:push
+
+# Seed with test data
+npm run db:seed
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 2. Full Setup Guide
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+See [QUICKSTART.md](./QUICKSTART.md) for 5-minute setup or [POSTGRES_SETUP.md](./POSTGRES_SETUP.md) for detailed PostgreSQL configuration.
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+bealpha-dashboard/
+├── app/
+│   ├── page.tsx              # Main dashboard component
+│   ├── layout.tsx            # App layout
+│   ├── globals.css           # Material UI styling
+│   └── api/
+│       ├── releases/         # Release endpoints
+│       ├── playlists/        # Playlist endpoints
+│       └── analytics/        # Analytics endpoints
+├── prisma/
+│   ├── schema.prisma         # Database schema
+│   └── seed.ts               # Test data seeder
+└── public/                   # Static assets
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Tech Stack
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Frontend**: Next.js 13+, React 19, TypeScript
+- **UI Framework**: Material UI (@mui/icons-material)
+- **Styling**: Tailwind CSS, Material Design typography
+- **Charts**: Recharts (line, bar, pie charts)
+- **Database**: PostgreSQL with Prisma ORM
+- **Fonts**: Roboto (@fontsource/roboto)
+
+## API Endpoints
+
+### Releases
+- `GET /api/releases` - Fetch all releases
+- `POST /api/releases` - Create new release
+
+### Playlists
+- `GET /api/playlists` - Fetch all playlists
+- `POST /api/playlists` - Create new playlist
+
+### Analytics
+- `GET /api/analytics` - Fetch analytics data
+- `POST /api/analytics` - Record new analytics
+
+## Database Commands
+
+```powershell
+# Start development server
+npm run dev
+
+# Database management
+npm run db:push              # Initialize/update schema
+npm run db:seed              # Seed with test data
+npm run db:studio            # Open Prisma Studio (Web UI)
+npm run db:migrate           # Create migrations
+
+# Production
+npm run build
+npm run start
+```
+
+## Database Models
+
+### Release
+- Title, Artist, Label, Project name
+- Format (Single/Album/EP)
+- Release date and cover image
+- Status tracking (pending/scheduled/released/rejected)
+
+### Playlist
+- Name and platform (Spotify/Apple Music/etc)
+- Play count and followers
+- Color for visualization
+
+### PlaylistPerformance
+- Historical tracking of playlist metrics
+- Date-based performance data
+
+### Analytics
+- Daily metrics: total plays, skips, skip rate
+- Average play duration
+
+## Troubleshooting
+
+**PostgreSQL connection error?**
+- Ensure PostgreSQL is running
+- Check `.env.local` has correct credentials
+- Verify database `bealpha_db` exists
+
+**Missing dependencies?**
+```powershell
+npm install
+npx prisma generate
+```
+
+**Reset database?**
+```powershell
+npx prisma migrate reset
+npm run db:seed
+```
+
+## Documentation
+
+- [Quick Start Guide](./QUICKSTART.md) - 5-minute setup
+- [PostgreSQL Setup](./POSTGRES_SETUP.md) - Detailed database configuration
+- [Integration Guide](./INTEGRATION_GUIDE.md) - API and schema details
+- [Prisma Docs](https://www.prisma.io/docs/) - Database ORM documentation
+- [Next.js Docs](https://nextjs.org/docs) - Framework documentation
+
+## Development
+
+Built with:
+- React hooks for state management
+- Server-side rendering with Next.js
+- Material Design principles
+- TypeScript for type safety
+
+## Production Deployment
+
+1. Update `.env.local` with production database URL
+2. Run `npm run build`
+3. Deploy with `npm run start`
+4. Or use: Vercel, AWS, Digital Ocean, etc.
+
+**Note**: Use managed PostgreSQL service for production (AWS RDS, Supabase, etc.)
+
+## License
+
+BEALPHA MUSIC GROUP LLC
+
+## Support
+
+For issues or questions:
+1. Check documentation files
+2. Review Prisma and Next.js docs
+3. Check database connection with `npm run db:studio`
 
 ## Deploy on Vercel
 
