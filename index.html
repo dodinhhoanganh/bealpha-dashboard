@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>beAlpha - Music Distribution</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="container flex" style="justify-content: space-between;">
+            <a href="#" class="logo">
+                be<span>Alpha</span>
+            </a>
+
+            <button class="mobile-toggle">☰</button>
+
+            <nav class="nav-links flex">
+                <a href="#about">About</a>
+                <a href="#services">Services</a>
+                <a href="#">Technology</a>
+                <a href="#">Dashboard</a>
+                <a href="#">FAQ</a>
+                <a href="http://localhost:3000/login" class="btn btn-primary client-login-btn">Sign In</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container hero-content">
+            <h1>PUBLISHING MUSIC HAS<br>NEVER BEEN SO EASY!</h1>
+            <p>We provide everything you need. Release your music to digital platforms, protect your copyright, and
+                manage your earnings with ease.</p>
+            <div class="flex hero-buttons">
+                <a href="#" class="btn btn-primary">Start Release</a>
+                <a href="#about" class="btn btn-outline">About Us</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services Section -->
+    <section class="section" id="services">
+        <div class="container">
+            <h2 class="section-title">EVERYTHING YOU NEED</h2>
+            <div class="grid services-grid">
+                <div class="service-card">
+                    <div class="service-icon"><i class="fas fa-music"></i></div>
+                    <h3>Release Your Music</h3>
+                    <p>We release your music to over 30 digital platforms worldwide, bringing your art to over 7 billion
+                        people.</p>
+                </div>
+                <div class="service-card">
+                    <div class="service-icon"><i class="fas fa-shield-alt"></i></div>
+                    <h3>Copyright Protection</h3>
+                    <p>All your works are protected by digital copyright. Receive money from digital rights securely.
+                    </p>
+                </div>
+                <div class="service-card">
+                    <div class="service-icon"><i class="fas fa-tachometer-alt"></i></div>
+                    <h3>Easy Management</h3>
+                    <p>We provide you with a powerful dashboard to manage your catalog and analytics in the easiest way
+                        possible.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Parallax Section -->
+    <section class="parallax-section">
+        <div class="container parallax-content">
+            <h2>FOUNDED BY CREATORS, FOR CREATORS</h2>
+            <p>beAlpha (formerly iMir) was established to help artists, singers, and producers succeed in the digital
+                era.</p>
+            <br>
+            <a href="#" class="btn btn-outline">Join Us Now</a>
+        </div>
+    </section>
+
+    <!-- About Section (New) -->
+    <section class="section" id="about" style="background: var(--surface-color);">
+        <div class="container">
+            <div style="max-width: 800px; margin: 0 auto; text-align: center;">
+                <h2 class="section-title">ABOUT US</h2>
+                <p style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 20px;">
+                    beAlpha is a record label, founded in 2020. We were established with the purpose of helping artists,
+                    singers, musicians, and music producers in the field of digital distribution and copyright.
+                </p>
+                <p style="font-size: 1.1rem; color: var(--text-secondary);">
+                    As a label under ADED Music Group LLC, we have strong relationships with global partners. We release
+                    your music worldwide and bring your sound to the global stage.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <h2>be<span>Alpha</span></h2>
+                    <p>Publishing music has never been so easy.</p>
+                </div>
+                <div class="footer-col">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#about">About Us</a></li>
+                        <li><a href="#">Our Team</a></li>
+                        <li><a href="#">Contact</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>Actions</h4>
+                    <ul>
+                        <li><a href="#">Sign Up</a></li>
+                        <li><a href="login.html">Sign In</a></li>
+                        <li><a href="#">FAQ</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>Connect</h4>
+                    <ul>
+                        <li><a href="#">Facebook</a></li>
+                        <li><a href="#">Instagram</a></li>
+                        <li><a href="#">YouTube</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                &copy; <span id="current-year"></span> beAlpha. All Rights Reserved.
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
