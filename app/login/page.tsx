@@ -323,11 +323,11 @@ export default function LoginPage() {
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            <circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
           </svg>
           {LOCALES.find((l) => l.code === language)?.nativeName || "English"}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform duration-200 ${langOpen ? "rotate-180" : ""}`}>
-            <path d="M6 9l6 6 6-6"/>
+            <path d="M6 9l6 6 6-6" />
           </svg>
         </button>
 
@@ -349,16 +349,15 @@ export default function LoginPage() {
                   setLanguage(locale.code);
                   setLangOpen(false);
                 }}
-                className={`w-full text-left px-4 py-2.5 text-sm transition-colors duration-150 flex items-center justify-between ${
-                  language === locale.code
+                className={`w-full text-left px-4 py-2.5 text-sm transition-colors duration-150 flex items-center justify-between ${language === locale.code
                     ? "text-white bg-white/10"
                     : "text-white/70 hover:text-white hover:bg-white/5"
-                }`}
+                  }`}
               >
                 <span>{locale.nativeName}</span>
                 {language === locale.code && (
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 13l4 4L19 7"/>
+                    <path d="M5 13l4 4L19 7" />
                   </svg>
                 )}
               </button>
@@ -820,25 +819,25 @@ export default function LoginPage() {
             {(selectedMethod === "app" ||
               (selectedMethod !== "recovery" &&
                 availableMethods.includes("app"))) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setVerificationCode("");
-                  setSelectedMethod("recovery");
-                }}
-                disabled={loading}
-                className="w-full text-center text-sm transition-colors duration-200 disabled:opacity-50 mt-2"
-                style={{ color: "var(--accent-text)" }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.color = "var(--accent)")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.color = "var(--accent-text)")
-                }
-              >
-                {t("login.useRecoveryCode")}
-              </button>
-            )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerificationCode("");
+                    setSelectedMethod("recovery");
+                  }}
+                  disabled={loading}
+                  className="w-full text-center text-sm transition-colors duration-200 disabled:opacity-50 mt-2"
+                  style={{ color: "var(--accent-text)" }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.color = "var(--accent)")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.color = "var(--accent-text)")
+                  }
+                >
+                  {t("login.useRecoveryCode")}
+                </button>
+              )}
           </form>
         )}
       </div>
@@ -846,7 +845,7 @@ export default function LoginPage() {
       {/* ═══════════ Footer / Copyright ═══════════ */}
       <div className="absolute bottom-6 left-0 right-0 text-center z-20">
         <p className="text-[12px] font-normal text-slate-500 drop-shadow-md">
-          &copy; {new Date().getFullYear()} beAlpha. {t("login.copyright")}
+          &copy; 2021 - {new Date().getFullYear()} beAlpha. {t("login.copyright")}
         </p>
       </div>
     </div>
