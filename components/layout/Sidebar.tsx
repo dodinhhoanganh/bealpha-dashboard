@@ -23,8 +23,11 @@ import {
   faList,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { useTheme } from "@/components/ThemeProvider";
+import { useTheme } from "@/components/layout/ThemeProvider";
+import { useBrand } from "@/components/layout/BrandProvider";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { canAccessPanel } from "@/lib/ui-capabilities";
+import SecureImage from "@/components/ui/SecureImage";
 
 interface SidebarProps {
   activePanel: string;
@@ -175,12 +178,14 @@ export default function Sidebar({
   const [mobileOpen, setMobileOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   const { theme } = useTheme();
+  const brand = useBrand();
   const { t } = useI18n();
 
-  // Persist collapse state
   useEffect(() => {
-    const saved = localStorage.getItem("sidebar_collapsed");
-    if (saved === "true") setCollapsed(true);
+    const hydrationTimer = window.setTimeout(() => {
+      setCollapsed(localStorage.getItem("sidebar_collapsed") === "true");
+    });
+    return () => window.clearTimeout(hydrationTimer);
   }, []);
 
   useEffect(() => {
@@ -204,12 +209,14 @@ export default function Sidebar({
 
   // Group nav items
   const groups = ["MUSIC", "INSIGHTS", "OPERATIONS"];
-  const filteredItems = navItems.filter((item) => hasAccess(user, item));
+  const filteredItems = navItems.filter(
+    (item) => user && hasAccess(user, item) && canAccessPanel(user, item.id),
+  );
 
   const displayName =
-    user?.name || user?.stageName || user?.email?.split("@")[0] || "User";
+    user?.name || user?.stageName || user?.email?.split("@")[0] || t("common.user", "User");
   const initials = displayName.charAt(0).toUpperCase();
-  const entityLabel = user?.entityName || user?.entityType || "User";
+  const entityLabel = user?.entityName || user?.entityType || t("common.user", "User");
   const roleLabel = user?.entityRole?.toLowerCase() || "member";
 
   return (
@@ -217,7 +224,8 @@ export default function Sidebar({
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed top-3 left-3 z-50 p-2.5 rounded-xl md:hidden transition-colors"
+        className="fixed top-3 left-3 z-50 flex h-10 w-10 items-center justify-center rounded-lg md:hidden"
+        aria-label={t("sidebar.openSidebar", "Open navigation")}
         style={{
           background: "var(--bg-elevated)",
           color: "var(--text-secondary)",
@@ -239,8 +247,8 @@ export default function Sidebar({
       <aside
         ref={sidebarRef}
         className={`
-          fixed top-0 left-0 h-screen z-50 flex flex-col
-          transition-all duration-300 ease-in-out
+          workbench-sidebar fixed top-0 left-0 h-[100dvh] z-50 flex flex-col
+          transition-transform
           ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
           md:translate-x-0 md:relative md:z-auto
         `}
@@ -248,8 +256,8 @@ export default function Sidebar({
           width: collapsed
             ? "var(--sidebar-collapsed-width)"
             : "var(--sidebar-width)",
-          background: "var(--bg-sidebar)",
-          borderRight: "1px solid var(--border-primary)",
+          transitionDuration: "var(--dur-base)",
+          transitionTimingFunction: "var(--ease-out)",
         }}
       >
         {/* Logo area */}
@@ -262,14 +270,14 @@ export default function Sidebar({
         >
           {!collapsed && (
             <div className="flex items-center overflow-hidden w-[160px] h-14 relative">
-              <img
+              <SecureImage
                 src={
-                  theme === "dark"
-                    ? "/Logo (White, Transparent).png"
-                    : "/Logo (Black, Transparent).png"
+                  brand.logoUrl ?? (theme === "dark"
+                    ? "/logo-white.png"
+                    : "/logo-black.png")
                 }
-                alt="BeAlpha Logo"
-                className="absolute w-[140px] h-[140px] max-w-none left-[-15px] top-1/2 -translate-y-1/2"
+                alt={`${brand.displayName} logo`}
+                className={brand.logoUrl ? "h-10 w-auto max-w-[150px] object-contain" : "absolute w-[140px] h-[140px] max-w-none left-[-15px] top-1/2 -translate-y-1/2"}
               />
             </div>
           )}
@@ -278,7 +286,7 @@ export default function Sidebar({
               setCollapsed(!collapsed);
               setMobileOpen(false);
             }}
-            className="p-2 rounded-lg transition-all duration-200"
+            className="flex h-9 w-9 items-center justify-center rounded-lg"
             style={{ color: "var(--text-tertiary)" }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = "var(--bg-elevated)";
@@ -329,8 +337,8 @@ export default function Sidebar({
                           setMobileOpen(false);
                         }}
                         className={`
-                          w-full flex items-center gap-3 transition-all duration-200 group
-                          ${collapsed ? "justify-center px-0 py-2.5 rounded-xl" : "px-3 py-2.5 rounded-xl"}
+                          workbench-nav-item w-full flex items-center gap-3 group
+                          ${collapsed ? "justify-center px-0 py-2.5 rounded-lg" : "px-3 py-2.5 rounded-lg"}
                         `}
                         style={{
                           background: isActive
@@ -341,6 +349,8 @@ export default function Sidebar({
                             : "var(--text-tertiary)",
                           fontWeight: isActive ? 600 : 450,
                           fontSize: 13,
+                          boxShadow: isActive ? "inset 2px 0 0 var(--accent)" : "none",
+                          transition: "background var(--transition-fast), color var(--transition-fast)",
                         }}
                         onMouseEnter={(e) => {
                           if (!isActive) {
@@ -360,12 +370,10 @@ export default function Sidebar({
                         title={collapsed ? t(item.label) : undefined}
                       >
                         <div
-                          className={`flex items-center justify-center ${collapsed ? "w-8 h-8" : "w-7 h-7"} rounded-lg transition-colors duration-200 shrink-0`}
+                          className={`flex items-center justify-center ${collapsed ? "w-8 h-8" : "w-7 h-7"} rounded-md shrink-0`}
                           style={{
-                            background: isActive
-                              ? "var(--accent)"
-                              : "transparent",
-                            color: isActive ? "#FFFFFF" : "inherit",
+                            background: "transparent",
+                            color: isActive ? "var(--accent-text)" : "inherit",
                           }}
                         >
                           <FontAwesomeIcon
@@ -397,7 +405,7 @@ export default function Sidebar({
               setMobileOpen(false);
             }}
             className={`
-              w-full flex items-center gap-3 rounded-xl transition-all duration-200 mt-1
+              workbench-nav-item w-full flex items-center gap-3 rounded-lg mt-1
               ${collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}
             `}
             style={{
@@ -432,9 +440,8 @@ export default function Sidebar({
             <div
               className={`flex items-center justify-center ${collapsed ? "w-8 h-8" : "w-7 h-7"} rounded-lg shrink-0`}
               style={{
-                background:
-                  activePanel === "settings" ? "var(--accent)" : "transparent",
-                color: activePanel === "settings" ? "#FFFFFF" : "inherit",
+                background: "transparent",
+                color: activePanel === "settings" ? "var(--accent-text)" : "inherit",
               }}
             >
               <FontAwesomeIcon icon={faGear} className="w-3.5 h-3.5" />
@@ -460,7 +467,7 @@ export default function Sidebar({
               }}
             >
               {user?.avatar ? (
-                <img
+                <SecureImage
                   src={user.avatar}
                   alt={displayName}
                   className="w-full h-full object-cover"
@@ -488,7 +495,7 @@ export default function Sidebar({
             {!collapsed && (
               <button
                 onClick={onLogout}
-                className="p-1.5 rounded-lg transition-all duration-200 shrink-0"
+                className="p-1.5 rounded-lg transition-colors duration-200 shrink-0"
                 style={{ color: "var(--text-disabled)" }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background =

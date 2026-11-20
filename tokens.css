@@ -1,0 +1,118 @@
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 */
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: design.md · designed-as-app */
+:root,
+[data-theme="dark"] {
+  --color-paper: oklch(0.145 0.006 255);
+  --color-paper-2: oklch(0.185 0.008 255);
+  --color-paper-3: oklch(0.225 0.009 255);
+  --color-ink: oklch(0.965 0.004 255);
+  --color-ink-2: oklch(0.72 0.012 255);
+  --color-ink-3: oklch(0.56 0.012 255);
+  --color-rule: oklch(0.29 0.009 255);
+  --color-rule-2: oklch(0.39 0.01 255);
+  --color-muted: var(--color-ink-3);
+  --color-neutral: oklch(0.44 0.012 255);
+  --color-accent: oklch(0.64 0.19 255);
+  --color-accent-strong: oklch(0.56 0.21 255);
+  --color-accent-ink: oklch(0.99 0.004 255);
+  --color-focus: oklch(0.72 0.16 250);
+
+  --color-status-success: oklch(0.8 0.18 145);
+  --color-status-success-surface: color-mix(in oklch, var(--color-status-success) 10%, transparent);
+  --color-status-warning: oklch(0.83 0.17 82);
+  --color-status-warning-surface: color-mix(in oklch, var(--color-status-warning) 10%, transparent);
+  --color-status-error: oklch(0.72 0.19 25);
+  --color-status-error-surface: color-mix(in oklch, var(--color-status-error) 10%, transparent);
+  --color-status-info: oklch(0.7 0.15 252);
+  --color-status-info-surface: color-mix(in oklch, var(--color-status-info) 10%, transparent);
+
+  --color-platform-spotify: #1db954;
+  --color-platform-apple: #fc3c44;
+  --color-platform-youtube: #ff0000;
+  --color-platform-amazon: #ff9900;
+  --color-platform-tidal: #ffffff;
+  --color-platform-deezer: #a238ff;
+  --color-platform-soundcloud: #ff5500;
+
+  --color-scrollbar: oklch(0.29 0.009 255);
+  --color-scrollbar-hover: oklch(0.4 0.01 255);
+  --color-shadow: oklch(0.04 0.004 255 / 0.34);
+  --color-overlay: oklch(0.04 0.004 255 / 0.72);
+
+  --font-display: var(--font-manrope), "Manrope", "Avenir Next", "Segoe UI Variable", sans-serif;
+  --font-body: var(--font-manrope), "Manrope", "Avenir Next", "Segoe UI Variable", sans-serif;
+  --font-code: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-outlier: var(--font-code);
+
+  --space-3xs: 0.25rem;
+  --space-2xs: 0.5rem;
+  --space-xs: 0.75rem;
+  --space-sm: 1rem;
+  --space-md: 1.5rem;
+  --space-lg: 2rem;
+  --space-xl: 3rem;
+  --space-2xl: 4rem;
+  --space-3xl: 6rem;
+  --space-4xl: 8rem;
+  --space-5xl: 12rem;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+  --text-2xl: clamp(2rem, 3vw, 2.75rem);
+  --text-display: clamp(2.5rem, 5vw, 4.5rem);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms;
+  --dur-short: 140ms;
+  --dur-base: 220ms;
+  --dur-long: 360ms;
+
+  --radius-input: 0.625rem;
+  --radius-card: 0.75rem;
+  --radius-panel: 1rem;
+  --radius-pill: 999px;
+  --rule-hair: 1px;
+  --rule-fine: 2px;
+  --rule-hairline: var(--rule-hair);
+
+  --shadow-sm: 0 1px 2px var(--color-shadow);
+  --shadow-md: 0 8px 24px var(--color-shadow);
+  --shadow-lg: 0 16px 40px var(--color-shadow);
+  --shadow-xl: 0 24px 64px var(--color-shadow);
+  --shadow-card: var(--shadow-sm);
+}
+
+[data-theme="light"] {
+  --color-paper: oklch(0.985 0.003 255);
+  --color-paper-2: oklch(0.96 0.005 255);
+  --color-paper-3: oklch(0.925 0.007 255);
+  --color-ink: oklch(0.19 0.012 255);
+  --color-ink-2: oklch(0.43 0.014 255);
+  --color-ink-3: oklch(0.56 0.012 255);
+  --color-rule: oklch(0.87 0.008 255);
+  --color-rule-2: oklch(0.76 0.009 255);
+  --color-muted: var(--color-ink-3);
+  --color-neutral: oklch(0.48 0.012 255);
+  --color-accent: oklch(0.55 0.2 255);
+  --color-accent-strong: oklch(0.48 0.2 255);
+  --color-accent-ink: oklch(0.99 0.004 255);
+  --color-focus: oklch(0.5 0.2 255);
+  --color-status-success: oklch(0.62 0.19 145);
+  --color-status-success-surface: color-mix(in oklch, var(--color-status-success) 6%, transparent);
+  --color-status-warning: oklch(0.62 0.16 65);
+  --color-status-warning-surface: color-mix(in oklch, var(--color-status-warning) 6%, transparent);
+  --color-status-error: oklch(0.58 0.22 25);
+  --color-status-error-surface: color-mix(in oklch, var(--color-status-error) 6%, transparent);
+  --color-status-info: oklch(0.55 0.2 255);
+  --color-status-info-surface: color-mix(in oklch, var(--color-status-info) 6%, transparent);
+  --color-platform-tidal: #000000;
+  --color-scrollbar: oklch(0.85 0.007 255);
+  --color-scrollbar-hover: oklch(0.78 0.008 255);
+  --color-shadow: oklch(0.12 0.008 255 / 0.12);
+  --color-overlay: oklch(0.12 0.008 255 / 0.56);
+}

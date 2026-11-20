@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useI18n } from "@/lib/i18n/I18nProvider";
 
 import { useTheme } from "./ThemeProvider";
 
@@ -19,7 +18,6 @@ interface Particle {
 }
 
 export default function InteractiveBackground() {
-  const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { theme } = useTheme();
 
@@ -41,7 +39,6 @@ export default function InteractiveBackground() {
     const shapes: ("star" | "vinyl" | "note")[] = ["star", "vinyl", "note"];
 
     let draggedParticle: Particle | null = null;
-    let isMouseDown = false;
 
     const mouse = {
       x: window.innerWidth / 2,
@@ -61,7 +58,6 @@ export default function InteractiveBackground() {
     };
 
     const handleMouseDown = (e: MouseEvent) => {
-      isMouseDown = true;
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         const dx = e.clientX - p.x;
@@ -75,7 +71,6 @@ export default function InteractiveBackground() {
     };
 
     const handleMouseUp = () => {
-      isMouseDown = false;
       draggedParticle = null;
     };
 

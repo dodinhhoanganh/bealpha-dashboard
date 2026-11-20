@@ -2,19 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useTheme } from "@/components/ThemeProvider";
+import Image from "next/image";
+import { useTheme } from "@/components/layout/ThemeProvider";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { translateApiError } from "@/lib/i18n/translateApiError";
-import InteractiveBackground from "@/components/InteractiveBackground";
+import InteractiveBackground from "@/components/ui/InteractiveBackground";
 import {
   VisibilityIcon,
   VisibilityOffIcon,
-} from "@/components/Icon";
+} from "@/components/ui/Icon";
+import { ApiClientError, publicApiRequest } from "@/lib/api-client";
 
 interface InvitationData {
   id: string;
   email: string;
   role: string;
+  businessTitle: string | null;
   status: string;
   expiresAt: string;
   isExpired: boolean;
@@ -25,7 +28,7 @@ interface InvitationData {
     logoUrl?: string;
     isActive: boolean;
   };
-  inviter: {
+  inviter?: {
     email: string;
     name?: string;
   };
@@ -58,25 +61,46 @@ export default function InvitePage() {
 
     const fetchInvitation = async () => {
       try {
-        const res = await fetch(`/api/invitations/accept?token=${token}`);
-        const data = await res.json();
-
-        if (!res.ok) {
-          setError(data.error || "Invalid invitation link");
-          setLoading(false);
-          return;
-        }
-
-        setInvitation(data);
-      } catch {
-        setError("Failed to load invitation details");
+        const data = await publicApiRequest<{
+          id: string;
+          email: string;
+          role: string;
+          businessTitle: string | null;
+          status: string;
+          expiresAt: string;
+          expired: boolean;
+          existingUser: boolean;
+          entity: { id: string; type: string; name: string };
+        }>("/api/v1/auth/invitations/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+        setInvitation({
+          id: data.id,
+          email: data.email,
+          role: data.role,
+          businessTitle: data.businessTitle,
+          status: data.status,
+          expiresAt: data.expiresAt,
+          isExpired: data.expired,
+          hasExistingAccount: data.existingUser,
+          entity: {
+            id: data.entity.id,
+            officialName: data.entity.name,
+            entityType: data.entity.type,
+            isActive: true,
+          },
+        });
+      } catch (error) {
+        setError(error instanceof ApiClientError ? error.message : t("common.failedToLoadInvitation"));
       } finally {
         setLoading(false);
       }
     };
 
     fetchInvitation();
-  }, [token]);
+  }, [token, t]);
 
   const handleAccept = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,8 +109,8 @@ export default function InvitePage() {
 
     // Validation for new users
     if (invitation && !invitation.hasExistingAccount) {
-      if (!password || password.length < 8) {
-        setError(t("invite.passwordMinLength", "Password must be at least 8 characters"));
+      if (!password || password.length < 12 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+        setError(t("invite.passwordMinLength", "Password must be at least 12 characters and include upper, lower, number, and symbol"));
         setSubmitting(false);
         return;
       }
@@ -98,7 +122,7 @@ export default function InvitePage() {
     }
 
     try {
-      const res = await fetch("/api/invitations/accept", {
+      await publicApiRequest("/api/v1/auth/invitations/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -108,22 +132,14 @@ export default function InvitePage() {
         }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(translateApiError(data.error, t));
-        setSubmitting(false);
-        return;
-      }
-
-      setSuccess(data.message || t("invite.success", "Invitation accepted successfully!"));
+      setSuccess(t("invite.success", "Invitation accepted successfully!"));
 
       // Redirect to login after a short delay
       setTimeout(() => {
         router.push("/login");
       }, 2500);
-    } catch {
-      setError(t("invite.errorOccurred", "An error occurred. Please try again."));
+    } catch (error) {
+      setError(error instanceof ApiClientError ? translateApiError(error.code, t) : t("invite.errorOccurred", "An error occurred. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -132,9 +148,10 @@ export default function InvitePage() {
   // Helper: entity type badge
   const getEntityTypeBadge = (type: string) => {
     const labels: Record<string, string> = {
-      DISTRIBUTOR: "Distributor",
-      LABEL: "Label",
-      SUB_ACCOUNT: "Sub-Account",
+      SUPER_ADMIN: t("entities.superAdmin", "BeAlpha Platform Owner"),
+      SYSTEM_ADMIN: t("entities.systemAdmin", "BeAlpha Operations Team"),
+      ORGANIZATION: t("entities.organization", "Customer Organization"),
+      SUB_ACCOUNT: t("entities.subAccount", "Client Account"),
     };
     return labels[type] || type;
   };
@@ -149,6 +166,14 @@ export default function InvitePage() {
     return colors[role] || { bg: "var(--bg-elevated)", text: "var(--text-secondary)" };
   };
 
+  const getAccessLevelLabel = (role: string) => ({
+    OWNER: t("entities.owner", "Owner"),
+    ADMIN: t("entities.admin", "Administrator"),
+    REVIEWER: t("entities.reviewer", "Release reviewer"),
+    ACCOUNTANT: t("entities.accountant", "Accountant"),
+    MEMBER: t("entities.member", "Member"),
+  } as Record<string, string>)[role] || role;
+
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
@@ -158,13 +183,12 @@ export default function InvitePage() {
 
       {/* ═══════════ Floating Logo ═══════════ */}
       <div className="absolute top-12 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center w-[500px] h-[100px]">
-        <img
-          src={
-            theme === "dark"
-              ? "/Logo (White, Transparent).png"
-              : "/Logo (Black, Transparent).png"
-          }
+        <Image
+          src={theme === "dark" ? "/logo-white.png" : "/logo-black.png"}
           alt="beAlpha Logo"
+          width={360}
+          height={100}
+          priority
           className="w-[360px] h-auto object-contain"
           style={{
             filter:
@@ -291,7 +315,7 @@ export default function InvitePage() {
                 className="text-sm mt-2"
                 style={{ color: "var(--text-tertiary)" }}
               >
-                {invitation.inviter.name || invitation.inviter.email}{" "}
+                {invitation.inviter?.name || invitation.inviter?.email || "BeAlpha"}{" "}
                 {t("invite.invitedYouTo", "invited you to join")}
               </p>
             </div>
@@ -321,9 +345,10 @@ export default function InvitePage() {
                   {getEntityTypeBadge(invitation.entity.entityType)}
                 </span>
               </div>
+              {invitation.businessTitle && <p className="mb-2 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>{invitation.businessTitle}</p>}
               <div className="flex items-center gap-2">
                 <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-                  {t("invite.roleLabel", "Your role:")}
+                  {t("invite.roleLabel", "Your access:")}
                 </span>
                 <span
                   className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
@@ -332,7 +357,7 @@ export default function InvitePage() {
                     color: getRoleBadge(invitation.role).text,
                   }}
                 >
-                  {invitation.role}
+                  {getAccessLevelLabel(invitation.role)}
                 </span>
               </div>
             </div>

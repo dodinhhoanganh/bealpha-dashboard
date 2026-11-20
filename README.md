@@ -1,196 +1,48 @@
-# BEALPHA Dashboard
+# BeAlpha Dashboard
 
-A modern music label management dashboard for BEALPHA MUSIC GROUP LLC. Built with Next.js, React, Material UI, and PostgreSQL.
+Next.js UI for the BeAlpha microservice platform. This package owns pages and browser-side API clients only. It has no API routes, database schema, Prisma client, media processing, or background workers.
 
-## Features
+## Architecture
 
-✨ **Modern UI**
-- Material Design dark theme (black/white/gray)
-- Responsive layout with Material UI components
-- Professional typography with Roboto font
-- Material Design icons throughout
-
-📊 **Analytics Dashboard**
-- Playlist performance visualization (line charts)
-- Play duration analytics (bar charts)
-- Skip rate analysis (pie charts)
-- Real-time metrics
-
-🎵 **Release Management**
-- Upcoming releases tracker
-- Recent releases timeline
-- Status tracking (pending/scheduled/released/rejected)
-- Cover art display
-
-🗄️ **Database Integration**
-- PostgreSQL backend with Prisma ORM
-- RESTful API endpoints
-- Release, Playlist, Analytics data models
-- Historical performance tracking
-
-## Quick Start
-
-### 1. Setup (5 minutes)
-
-```powershell
-# Update .env.local with your PostgreSQL password
-# DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/bealpha_db"
-
-# Install dependencies
-npm install
-
-# Initialize database
-npm run db:push
-
-# Seed with test data
-npm run db:seed
-
-# Start development server
-npm run dev
+```text
+browser -> Nginx -> Fastify API Gateway -> domain services
 ```
 
-Visit [http://localhost:3000](http://localhost:3000)
-
-### 2. Full Setup Guide
-
-See [QUICKSTART.md](./QUICKSTART.md) for 5-minute setup or [POSTGRES_SETUP.md](./POSTGRES_SETUP.md) for detailed PostgreSQL configuration.
-
-## Project Structure
-
-```
-bealpha-dashboard/
-├── app/
-│   ├── page.tsx              # Main dashboard component
-│   ├── layout.tsx            # App layout
-│   ├── globals.css           # Material UI styling
-│   └── api/
-│       ├── releases/         # Release endpoints
-│       ├── playlists/        # Playlist endpoints
-│       └── analytics/        # Analytics endpoints
-├── prisma/
-│   ├── schema.prisma         # Database schema
-│   └── seed.ts               # Test data seeder
-└── public/                   # Static assets
-```
-
-## Tech Stack
-
-- **Frontend**: Next.js 13+, React 19, TypeScript
-- **UI Framework**: Material UI (@mui/icons-material)
-- **Styling**: Tailwind CSS, Material Design typography
-- **Charts**: Recharts (line, bar, pie charts)
-- **Database**: PostgreSQL with Prisma ORM
-- **Fonts**: Roboto (@fontsource/roboto)
-
-## API Endpoints
-
-### Releases
-- `GET /api/releases` - Fetch all releases
-- `POST /api/releases` - Create new release
-
-### Playlists
-- `GET /api/playlists` - Fetch all playlists
-- `POST /api/playlists` - Create new playlist
-
-### Analytics
-- `GET /api/analytics` - Fetch analytics data
-- `POST /api/analytics` - Record new analytics
-
-## Database Commands
-
-```powershell
-# Start development server
-npm run dev
-
-# Database management
-npm run db:push              # Initialize/update schema
-npm run db:seed              # Seed with test data
-npm run db:studio            # Open Prisma Studio (Web UI)
-npm run db:migrate           # Create migrations
-
-# Production
-npm run build
-npm run start
-```
-
-## Database Models
-
-### Release
-- Title, Artist, Label, Project name
-- Format (Single/Album/EP)
-- Release date and cover image
-- Status tracking (pending/scheduled/released/rejected)
-
-### Playlist
-- Name and platform (Spotify/Apple Music/etc)
-- Play count and followers
-- Color for visualization
-
-### PlaylistPerformance
-- Historical tracking of playlist metrics
-- Date-based performance data
-
-### Analytics
-- Daily metrics: total plays, skips, skip rate
-- Average play duration
-
-## Troubleshooting
-
-**PostgreSQL connection error?**
-- Ensure PostgreSQL is running
-- Check `.env.local` has correct credentials
-- Verify database `bealpha_db` exists
-
-**Missing dependencies?**
-```powershell
-npm install
-npx prisma generate
-```
-
-**Reset database?**
-```powershell
-npx prisma migrate reset
-npm run db:seed
-```
-
-## Documentation
-
-- [Quick Start Guide](./QUICKSTART.md) - 5-minute setup
-- [PostgreSQL Setup](./POSTGRES_SETUP.md) - Detailed database configuration
-- [Integration Guide](./INTEGRATION_GUIDE.md) - API and schema details
-- [Prisma Docs](https://www.prisma.io/docs/) - Database ORM documentation
-- [Next.js Docs](https://nextjs.org/docs) - Framework documentation
+- Browser control-plane calls use `/api/v1` through `lib/api-client.ts`.
+- Raw media uses short-lived signed URLs issued by Media service. Bytes do not pass through Dashboard or Gateway.
+- Authentication and tenant authorization are enforced by Gateway and each domain service.
+- `proxy.ts` adds browser security headers and CSP. It does not authenticate API requests.
 
 ## Development
 
-Built with:
-- React hooks for state management
-- Server-side rendering with Next.js
-- Material Design principles
-- TypeScript for type safety
+Prerequisites: Node.js 20.11+ and a reachable API Gateway.
 
-## Production Deployment
+```powershell
+npm install
+$env:NEXT_PUBLIC_API_BASE_URL='http://localhost:8080'
+npm run dev
+```
 
-1. Update `.env.local` with production database URL
-2. Run `npm run build`
-3. Deploy with `npm run start`
-4. Or use: Vercel, AWS, Digital Ocean, etc.
+Leave `NEXT_PUBLIC_API_BASE_URL` empty when Nginx serves Dashboard and Gateway on the same origin.
 
-**Note**: Use managed PostgreSQL service for production (AWS RDS, Supabase, etc.)
+## Verification
 
-## License
+```powershell
+npm run lint -- --quiet
+npx tsc --noEmit --incremental false
+npm test -- --runInBand
+npm run build
+```
 
-BEALPHA MUSIC GROUP LLC
+## Boundaries
 
-## Support
+- Do not add `app/api` route handlers.
+- Do not add Prisma or direct database access.
+- Do not parse, store, or process raw media.
+- Add backend behavior to the owning service under `../services/` and expose it through Gateway's static route allow-list.
 
-For issues or questions:
-1. Check documentation files
-2. Review Prisma and Next.js docs
-3. Check database connection with `npm run db:studio`
+See [DEVELOPMENT.md](./DEVELOPMENT.md), [QUICKSTART.md](./QUICKSTART.md), and [../docs/microservices/cutover-runbook.md](../docs/microservices/cutover-runbook.md).
 
-## Deploy on Vercel
+## Repository layout
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The `dashboard` branch contains this UI at its root. Use `main` for the full platform and integration testing.

@@ -8,6 +8,7 @@ import {
   useCallback,
   ReactNode,
 } from "react";
+import { apiRequest } from "@/lib/api-client";
 
 type Theme = "light" | "dark";
 
@@ -35,11 +36,8 @@ export function ThemeProvider({
   children: ReactNode;
 }) {
   const [theme, setThemeState] = useState<Theme>(initialTheme);
-  const [mounted, setMounted] = useState(false);
-
   // Apply theme to HTML element
   useEffect(() => {
-    setMounted(true);
     const root = document.documentElement;
     root.setAttribute("data-theme", theme);
     // Add transitioning class briefly for smooth animation
@@ -59,8 +57,8 @@ export function ThemeProvider({
 
     // Persist to database if requested
     if (syncToDb) {
-      fetch("/api/auth/profile", {
-        method: "PUT",
+      apiRequest("/api/v1/auth/profile", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theme: newTheme }),
       }).catch((err) => console.error("Failed to sync theme:", err));

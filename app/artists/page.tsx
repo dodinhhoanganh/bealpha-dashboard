@@ -4,6 +4,9 @@ import { translateApiError } from "@/lib/i18n/translateApiError";
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { ApiClientError, apiRequest, getCurrentUser } from "@/lib/api-client";
+import SecureImage from "@/components/ui/SecureImage";
+import { mediaAssetId } from "@/lib/stream-url";
 import {
   PersonAddIcon,
   EditIcon,
@@ -14,7 +17,7 @@ import {
   AlbumIcon,
   MusicNoteIcon,
   WarningIcon,
-} from "@/components/Icon";
+} from "@/components/ui/Icon";
 
 interface Label {
   id: string;
@@ -24,12 +27,12 @@ interface Label {
 interface Artist {
   id: string;
   name: string;
-  bio?: string;
-  isni?: string;
-  ipi?: string;
-  dpid?: string;
-  imageUrl?: string;
-  label?: Label;
+  bio?: string | null;
+  isni?: string | null;
+  ipi?: string | null;
+  dpid?: string | null;
+  imageUrl?: string | null;
+  label?: Label | null;
   labelName: string;
   releaseCount: number;
   trackCount: number;
@@ -94,11 +97,10 @@ export default function ArtistsPage() {
   useEffect(() => {
     async function checkPermissions() {
       try {
-        const res = await fetch("/api/auth/me");
-        if (res.ok) {
-          const data = await res.json();
-          const userPerms = data.user.permissions || [];
-          const roles = data.user.roles || [];
+        const user = await getCurrentUser();
+        {
+          const userPerms = user.permissions || [];
+          const roles = user.roles || [];
 
           setPermissions({
             canCreate: userPerms.includes("artist.create"),
@@ -120,23 +122,16 @@ export default function ArtistsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      if (labelFilter) params.set("labelId", labelFilter);
-
-      const [artistsRes, labelsRes] = await Promise.all([
-        fetch(`/api/artists?${params}`),
-        fetch("/api/labels"),
+      const [artistRows, labelRows] = await Promise.all([
+        apiRequest<Artist[]>("/api/v1/catalog/artists"),
+        apiRequest<Label[]>("/api/v1/catalog/labels"),
       ]);
-
-      if (artistsRes.ok) {
-        const artistsData = await artistsRes.json();
-        setArtists(artistsData.data || artistsData);
-      }
-      if (labelsRes.ok) {
-        const labelsData = await labelsRes.json();
-        setLabels(labelsData.data || labelsData);
-      }
+      const query = search.trim().toLowerCase();
+      setArtists(artistRows.filter((artist) =>
+        (!query || artist.name.toLowerCase().includes(query)) &&
+        (!labelFilter || artist.label?.id === labelFilter),
+      ));
+      setLabels(labelRows);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -187,21 +182,21 @@ export default function ArtistsPage() {
     // Validation
     const errors: string[] = [];
     if (!formData.name.trim()) {
-      errors.push("Artist Name is required");
+      errors.push(t("common.artistNameRequired"));
     } else if (formData.name.trim().length < 2) {
-      errors.push("Artist Name must be at least 2 characters");
+      errors.push(t("common.artistNameMin2"));
     }
     if (
       (permissions.isAdmin || permissions.isDistributor) &&
       !formData.labelId
     ) {
       errors.push(
-        "Label is required - every artist must be associated with a label",
+        t("artist.labelRequired", "Label is required - every artist must be associated with a label"),
       );
     }
-    if (formData.imageUrl && !/^https?:\/\/.+/.test(formData.imageUrl)) {
+    if (formData.imageUrl && !(/^https?:\/\/.+/.test(formData.imageUrl) || mediaAssetId(formData.imageUrl))) {
       errors.push(
-        "Image URL must be a valid URL starting with http:// or https://",
+        t("artist.invalidImageUrl", "Image URL must be a valid URL starting with http:// or https://"),
       );
     }
     if (errors.length > 0) {
@@ -212,39 +207,31 @@ export default function ArtistsPage() {
     setSaving(true);
 
     try {
-      const url =
+      const path =
         modalMode === "create"
-          ? "/api/artists"
-          : `/api/artists/${selectedArtist?.id}`;
+          ? "/api/v1/catalog/artists"
+          : `/api/v1/catalog/artists/${selectedArtist?.id}`;
 
       const method = modalMode === "create" ? "POST" : "PATCH";
 
-      const res = await fetch(url, {
+      await apiRequest(path, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formData.name,
-          bio: formData.bio || null,
-          isni: formData.isni || null,
-          ipi: formData.ipi || null,
-          dpid: formData.dpid || null,
-          imageUrl: formData.imageUrl || null,
-          labelId: formData.labelId || null,
+          bio: formData.bio || (modalMode === "edit" ? null : undefined),
+          isni: formData.isni || (modalMode === "edit" ? null : undefined),
+          ipi: formData.ipi || (modalMode === "edit" ? null : undefined),
+          dpid: formData.dpid || (modalMode === "edit" ? null : undefined),
+          imageUrl: formData.imageUrl || (modalMode === "edit" ? null : undefined),
+          labelId: formData.labelId || (modalMode === "edit" ? null : undefined),
         }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setFormError(translateApiError(data.error, t));
-        setSaving(false);
-        return;
-      }
-
       setShowModal(false);
       fetchData();
-    } catch {
-      setFormError("An error occurred");
+    } catch (error) {
+      setFormError(error instanceof ApiClientError ? translateApiError(error.code, t) : t("common.errorOccurred"));
     } finally {
       setSaving(false);
     }
@@ -262,20 +249,14 @@ export default function ArtistsPage() {
   const handleDelete = async (artistId: string) => {
     setDeleteLoading(true);
     try {
-      const res = await fetch(`/api/artists/${artistId}`, {
+      await apiRequest(`/api/v1/catalog/artists/${artistId}`, {
         method: "DELETE",
       });
-
-      if (res.ok) {
-        setDeleteConfirm(null);
-        setDeleteInfo(null);
-        fetchData();
-      } else {
-        const data = await res.json();
-        alert(translateApiError(data.error, t));
-      }
+      setDeleteConfirm(null);
+      setDeleteInfo(null);
+      fetchData();
     } catch (error) {
-      console.error("Error deleting artist:", error);
+      alert(error instanceof ApiClientError ? translateApiError(error.code, t) : t("common.errorOccurred"));
     } finally {
       setDeleteLoading(false);
     }
@@ -301,7 +282,7 @@ export default function ArtistsPage() {
               className="flex items-center gap-2 px-4 py-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] rounded-lg transition-colors text-sm font-medium text-white"
             >
               <PersonAddIcon size={18} />
-              Add Artist
+              {t("common.addArtist")}
             </button>
           )}
         </div>
@@ -353,8 +334,8 @@ export default function ArtistsPage() {
         ) : artists.length === 0 ? (
           <div className="text-center py-12 text-[var(--text-tertiary)]">
             {permissions.isArtist
-              ? "Your profile is not set up yet."
-              : "No artists found"}
+                ? t("artist.notSetUp", "Your profile is not set up yet.")
+                : t("artists.noArtists")}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -366,7 +347,7 @@ export default function ArtistsPage() {
                 {/* Artist Image */}
                 <div className="aspect-square bg-transparent relative">
                   {artist.imageUrl ? (
-                    <img
+                    <SecureImage
                       src={artist.imageUrl}
                       alt={artist.name}
                       className="w-full h-full object-cover"
@@ -415,11 +396,11 @@ export default function ArtistsPage() {
                   <div className="flex items-center gap-4 mt-3 text-xs text-[var(--text-tertiary)]">
                     <span className="flex items-center gap-1">
                       <AlbumIcon size={14} />
-                      {artist.releaseCount} releases
+                      {artist.releaseCount} {t("nav.releases", "releases")}
                     </span>
                     <span className="flex items-center gap-1">
                       <MusicNoteIcon size={14} />
-                      {artist.trackCount} tracks
+                      {artist.trackCount} {t("nav.tracks", "tracks")}
                     </span>
                   </div>
 
@@ -444,7 +425,7 @@ export default function ArtistsPage() {
           >
             <div className="flex items-center justify-between p-6 border-b border-[var(--border-primary)]">
               <h2 className="text-lg font-medium">
-                {modalMode === "create" ? "Add Artist" : "Edit Artist"}
+                {modalMode === "create" ? t("common.addArtist") : t("artists.editArtist")}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
@@ -463,7 +444,7 @@ export default function ArtistsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                  Artist Name *
+                  {t("form.artistName", "Artist Name *")}
                 </label>
                 <input
                   type="text"
@@ -478,7 +459,7 @@ export default function ArtistsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                  Bio
+                  {t("form.bio", "Bio")}
                 </label>
                 <textarea
                   value={formData.bio}
@@ -492,7 +473,7 @@ export default function ArtistsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                  Image URL
+                  {t("form.imageUrl", "Image URL")}
                 </label>
                 <input
                   type="url"
@@ -509,7 +490,7 @@ export default function ArtistsPage() {
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                   ISNI{" "}
                   <span className="text-slate-600 font-normal">
-                    (International Standard Name Identifier)
+                    {t("ui.page.internationalStandardNameIdentifier", "(International Standard Name Identifier)")}
                   </span>
                 </label>
                 <input
@@ -527,7 +508,7 @@ export default function ArtistsPage() {
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                   IPI{" "}
                   <span className="text-slate-600 font-normal">
-                    (Interested Party Information)
+                    {t("ui.page.interestedPartyInformation", "(Interested Party Information)")}
                   </span>
                 </label>
                 <input
@@ -545,7 +526,7 @@ export default function ArtistsPage() {
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                   DPID{" "}
                   <span className="text-slate-600 font-normal">
-                    (DDEX Party ID)
+                    {t("ui.page.ddexPartyID", "(DDEX Party ID)")}
                   </span>
                 </label>
                 <input
@@ -563,7 +544,7 @@ export default function ArtistsPage() {
               {(permissions.isAdmin || permissions.isDistributor) && (
                 <div>
                   <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                    Label *
+                    {t("nav.labels", "Label")} *
                   </label>
                   <select
                     value={formData.labelId}
@@ -597,10 +578,10 @@ export default function ArtistsPage() {
                   className="px-4 py-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 rounded-lg transition-colors text-sm font-medium text-white"
                 >
                   {saving
-                    ? "Saving..."
+                    ? t("common.saving")
                     : modalMode === "create"
-                      ? "Create"
-                      : "Save"}
+                      ? t("common.create")
+                      : t("common.save")}
                 </button>
               </div>
             </form>
@@ -617,28 +598,28 @@ export default function ArtistsPage() {
           >
             <h3 className="text-lg font-medium mb-2 text-[var(--status-error)] whitespace-nowrap">
               <WarningIcon size={18} className="inline-block mr-1 -mt-1" />{" "}
-              Delete Artist?
+              {t("common.confirmDeleteArtist")}?
             </h3>
             <p className="text-[var(--text-secondary)] text-sm mb-3">
-              Are you sure you want to delete{" "}
+              {t("common.confirmDeleteArtist")}{" "}
               <strong className="text-[var(--text-primary)]">
                 {deleteInfo?.name}
               </strong>
-              ? This action cannot be undone.
+              ? {t("common.cannotBeUndone")}
             </p>
             {deleteInfo &&
               (deleteInfo.releaseCount > 0 || deleteInfo.trackCount > 0) && (
                 <div className="p-3 bg-[var(--status-error-surface)] border border-red-500/20 rounded-lg mb-4">
                   <p className="text-xs text-[var(--status-error)] font-medium mb-2">
-                    The following will also be permanently deleted:
+                    {t("common.deleteWillRemove")}
                   </p>
                   <ul className="text-xs text-red-300 space-y-1">
                     {deleteInfo.releaseCount > 0 && (
-                      <li>• {deleteInfo.releaseCount} release(s)</li>
+                      <li>• {deleteInfo.releaseCount} {t("releases.releases_count", "release(s)")}</li>
                     )}
                     {deleteInfo.trackCount > 0 && (
                       <li>
-                        • {deleteInfo.trackCount} track(s) and their audio files
+                        • {deleteInfo.trackCount} {t("releases.tracksAndAudio", "track(s) and their audio files")}
                       </li>
                     )}
                     <li>{t("artist.deleteWarning", "- All associated cover art and streaming data")}</li>
@@ -660,7 +641,7 @@ export default function ArtistsPage() {
                 disabled={deleteLoading}
                 className="px-4 py-2 bg-[var(--status-error)] hover:brightness-110 rounded-lg transition-all text-sm font-medium disabled:opacity-50"
               >
-                {deleteLoading ? "Deleting..." : "Delete Everything"}
+                {deleteLoading ? t("common.loading") : t("common.delete")}
               </button>
             </div>
           </div>

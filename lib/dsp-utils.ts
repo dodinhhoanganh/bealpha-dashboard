@@ -1,22 +1,13 @@
 /**
- * DSP Utility Functions — Regex-based ID extraction from URLs/URIs
+ * External platform URL utilities.
  *
- * Supports:
- * - Spotify Web URLs: https://open.spotify.com/artist/23Gbd21nBxC1kCtcG2Cd0C?si=...
- * - Spotify App URIs: spotify:artist:23Gbd21nBxC1kCtcG2Cd0C
- * - Apple Music URLs: https://music.apple.com/us/artist/taylor-swift/159260351
- * - iTunes URLs: https://itunes.apple.com/fr/artist/name/159260351
- * - Apple Music URLs without slug: https://music.apple.com/gb/artist/159260351
+ * Extracts external artist IDs from supported web URLs and app URIs.
  */
 
 /**
- * Extract Spotify Artist ID from a URL or URI string.
+ * Extract an artist ID from a supported URL or URI string.
  *
- * Regex handles:
- * - https://open.spotify.com/artist/{id}?si=... (web URL with tracking params)
- * - spotify:artist:{id} (app URI)
- *
- * Spotify IDs are Base-62 strings, 22 characters long.
+ * The external ID is a Base-62 string, 22 characters long.
  * The [a-zA-Z0-9]+ capturing group stops at ? or / boundaries,
  * automatically stripping tracking parameters.
  */
@@ -24,7 +15,7 @@ export function extractSpotifyArtistId(input: string): string | null {
   if (!input || typeof input !== "string") return null;
   const trimmed = input.trim();
 
-  // Direct ID check — if it looks like a raw 22-char Base-62 ID
+  // Accept raw 22-character external IDs.
   if (/^[a-zA-Z0-9]{22}$/.test(trimmed)) {
     return trimmed;
   }
@@ -35,22 +26,16 @@ export function extractSpotifyArtistId(input: string): string | null {
 }
 
 /**
- * Extract Apple Music Artist ID from a URL string.
+ * Extract a numeric artist ID from a supported catalog URL.
  *
- * Regex handles all URL variants:
- * - https://music.apple.com/us/artist/taylor-swift/159260351 (with country + slug)
- * - https://music.apple.com/gb/artist/159260351 (with country, no slug)
- * - https://itunes.apple.com/fr/artist/name/159260351 (legacy iTunes)
- * - URLs with ?amgArtistId=123456789 (AMG parameter)
- *
- * Apple Music IDs are numeric integers.
+ * The external ID is a numeric integer.
  * Non-capturing groups skip country code and slug segments.
  */
 export function extractAppleMusicArtistId(input: string): string | null {
   if (!input || typeof input !== "string") return null;
   const trimmed = input.trim();
 
-  // Direct numeric ID check
+  // Accept raw numeric external IDs.
   if (/^\d{4,15}$/.test(trimmed)) {
     return trimmed;
   }
@@ -61,7 +46,7 @@ export function extractAppleMusicArtistId(input: string): string | null {
 }
 
 /**
- * Detect which DSP platform an input string belongs to and extract the ID.
+ * Detect which supported platform an input string belongs to and extract the ID.
  * Useful for paste-to-detect workflows.
  *
  * @returns { platform, id } or null if not recognized
@@ -82,8 +67,8 @@ export function detectDspFromInput(input: string): {
 }
 
 /**
- * Normalize Apple CDN artwork URL to a specific resolution.
- * Apple artwork URLs end with patterns like 100x100bb.jpg
+ * Normalize artwork CDN URLs to a specific resolution.
+ * Artwork URLs may end with patterns like 100x100bb.jpg.
  * This replaces the dimensions to get higher quality images.
  */
 export function normalizeAppleArtwork(url: string, size = 600): string {
@@ -92,14 +77,14 @@ export function normalizeAppleArtwork(url: string, size = 600): string {
 }
 
 /**
- * Build the canonical external URL for a Spotify artist.
+ * Build the canonical external URL for a platform artist.
  */
 export function spotifyArtistUrl(id: string): string {
   return `https://open.spotify.com/artist/${id}`;
 }
 
 /**
- * Build the canonical external URL for an Apple Music artist.
+ * Build the canonical external URL for a platform artist.
  */
 export function appleMusicArtistUrl(id: string): string {
   return `https://music.apple.com/artist/${id}`;

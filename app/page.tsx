@@ -1,58 +1,168 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { UserSession } from "@/lib/types";
-import { I18nProvider, useI18n } from "@/lib/i18n/I18nProvider";
-import { ToastProvider } from "@/components/Toast";
-import { useTheme } from "@/components/ThemeProvider";
+import { I18nProvider } from "@/lib/i18n/I18nProvider";
+import { ToastProvider } from "@/components/ui/Toast";
+import { useTheme } from "@/components/layout/ThemeProvider";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
+import { clearStreamTokenCache } from "@/lib/stream-url";
+import { apiRequest, clearAccessToken, getCurrentUser } from "@/lib/api-client";
+import { canAccessPanel } from "@/lib/ui-capabilities";
+import { BrandProvider } from "@/components/layout/BrandProvider";
 
-// Panel components
-import DashboardPanel from "@/components/DashboardPanel";
-import ReleasesPanel from "@/components/ReleasesPanel";
-import VevoCatalogPanel from "@/components/VevoCatalogPanel";
-import ChannelsPanel from "@/components/ChannelsPanel";
-import AssetsPanel from "@/components/AssetsPanel";
-import LabelsPanel from "@/components/LabelsPanel";
-import ArtistsPanel from "@/components/ArtistsPanel";
-import AnalyticsPanel from "@/components/AnalyticsPanel";
-import EarningsPanel from "@/components/EarningsPanel";
-import DistributionPanel from "@/components/DistributionPanel";
-import EntitiesPanel from "@/components/EntitiesPanel";
-import UsersPanel from "@/components/UsersPanel";
-import AuditLogPanel from "@/components/AuditLogPanel";
-import CompositionsPanel from "@/components/CompositionsPanel";
-import PlaylistsPanel from "@/components/PlaylistsPanel";
+const PanelLoading = () => (
+  <div className="flex h-full min-h-[320px] items-center justify-center">
+    <div
+      className="h-6 w-6 animate-spin rounded-full"
+      style={{ borderBottom: "2px solid var(--text-tertiary)" }}
+    />
+  </div>
+);
 
-// ============ MAIN APP ============
+const DashboardPanel = dynamic(
+  () => import("@/components/dashboard/DashboardPanel"),
+  { loading: PanelLoading },
+);
+const ReleasesPanel = dynamic(
+  () => import("@/components/releases/ReleasesPanel"),
+  { loading: PanelLoading },
+);
+const VevoCatalogPanel = dynamic(
+  () => import("@/components/vevo/VevoCatalogPanel"),
+  { loading: PanelLoading },
+);
+const ChannelsPanel = dynamic(
+  () => import("@/components/vevo/ChannelsPanel"),
+  { loading: PanelLoading },
+);
+const AssetsPanel = dynamic(
+  () => import("@/components/assets/AssetsPanel"),
+  { loading: PanelLoading },
+);
+const LabelsPanel = dynamic(
+  () => import("@/components/entities/LabelsPanel"),
+  { loading: PanelLoading },
+);
+const ArtistsPanel = dynamic(
+  () => import("@/components/entities/ArtistsPanel"),
+  { loading: PanelLoading },
+);
+const AnalyticsPanel = dynamic(
+  () => import("@/components/analytics/AnalyticsPanel"),
+  { loading: PanelLoading },
+);
+const EarningsPanel = dynamic(
+  () => import("@/components/analytics/EarningsPanel"),
+  { loading: PanelLoading },
+);
+const DistributionPanel = dynamic(
+  () => import("@/components/analytics/DistributionPanel"),
+  { loading: PanelLoading },
+);
+const EntitiesPanel = dynamic(
+  () => import("@/components/entities/EntitiesPanel"),
+  { loading: PanelLoading },
+);
+const UsersPanel = dynamic(
+  () => import("@/components/entities/UsersPanel"),
+  { loading: PanelLoading },
+);
+const AuditLogPanel = dynamic(
+  () => import("@/components/analytics/AuditLogPanel"),
+  { loading: PanelLoading },
+);
+const CompositionsPanel = dynamic(
+  () => import("@/components/releases/CompositionsPanel"),
+  { loading: PanelLoading },
+);
+const PlaylistsPanel = dynamic(
+  () => import("@/components/analytics/PlaylistsPanel"),
+  { loading: PanelLoading },
+);
+
+type OpenEntityEventDetail = {
+  type?: "ARTIST" | "RELEASE" | "ASSET" | "LABEL";
+  id?: string;
+  title?: string;
+  replayed?: boolean;
+};
+
+const PANEL_BY_ENTITY_TYPE: Record<
+  NonNullable<OpenEntityEventDetail["type"]>,
+  string
+> = {
+  ARTIST: "artists",
+  RELEASE: "releases",
+  ASSET: "assets",
+  LABEL: "labels",
+};
+
+const PANEL_TITLES: Record<string, string> = {
+  dashboard: "Home",
+  catalog: "Audio Catalog",
+  releases: "Audio Catalog",
+  vevo: "VEVO Catalog",
+  channels: "Channels",
+  assets: "Assets",
+  labels: "Labels",
+  artists: "Artists",
+  analytics: "Analytics",
+  earnings: "Earnings",
+  entities: "Organizations",
+  distribution: "Distribution",
+  "audit-log": "Audit Log",
+  users: "Users",
+  compositions: "Compositions",
+  playlists: "Playlists",
+  settings: "Settings",
+};
+
+function isSupportedTheme(theme: unknown): theme is "light" | "dark" {
+  return theme === "light" || theme === "dark";
+}
+
 export default function Home() {
-  const { t } = useI18n(); // Auto-injected
-
   const router = useRouter();
   const [user, setUser] = useState<UserSession | null>(null);
   const [activePanel, setActivePanel] = useState("dashboard");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pendingEntity, setPendingEntity] = useState<OpenEntityEventDetail | null>(null);
   const { setTheme } = useTheme();
 
-  // Fetch user session
+  const navigateWorkbench = useCallback((destination: string, pushHistory = true) => {
+    if (!user) return;
+    let panel = destination;
+    let entity: OpenEntityEventDetail | null = null;
+    let canonicalUrl = destination === "dashboard" ? "/" : `/?panel=${encodeURIComponent(destination)}`;
+    if (destination.startsWith("/")) {
+      const url = new URL(destination, window.location.origin);
+      panel = url.searchParams.get("panel") || "dashboard";
+      const candidates = [
+        ["releaseId", "RELEASE"], ["artistId", "ARTIST"], ["assetId", "ASSET"], ["labelId", "LABEL"],
+      ] as const;
+      for (const [key, type] of candidates) {
+        const id = url.searchParams.get(key);
+        if (id) { entity = { type, id, title: url.searchParams.get("title") || undefined }; break; }
+      }
+      canonicalUrl = `${url.pathname}${url.search}`;
+    }
+    if (panel === "catalog") panel = "releases";
+    if (!canAccessPanel(user, panel)) panel = "dashboard";
+    setActivePanel(panel);
+    setPendingEntity(entity);
+    if (pushHistory) window.history.pushState({}, "", panel === "dashboard" && !entity ? "/" : canonicalUrl);
+  }, [user]);
+
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await fetch("/api/auth/me");
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data.user);
-          // Sync theme from account to local state without triggering another DB save
-          if (
-            data.user.theme &&
-            (data.user.theme === "light" || data.user.theme === "dark")
-          ) {
-            setTheme(data.user.theme, false);
-          }
-        } else {
-          router.push("/login");
+        const currentUser = await getCurrentUser();
+        setUser(currentUser);
+        if (isSupportedTheme(currentUser.theme)) {
+          setTheme(currentUser.theme, false);
         }
       } catch (e) {
         console.error("Error fetching user:", e);
@@ -62,28 +172,59 @@ export default function Home() {
     fetchUser();
   }, [router, setTheme]);
 
-  // Global Search Navigation
   useEffect(() => {
-    const handler = (e: CustomEvent) => {
-      const { type } = e.detail;
-      if (type === "ARTIST") setActivePanel("artists");
-      else if (type === "RELEASE") setActivePanel("releases");
-      else if (type === "ASSET") setActivePanel("assets");
-      else if (type === "LABEL") setActivePanel("labels");
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<OpenEntityEventDetail>).detail ?? {};
+      if (!detail.type || detail.replayed) return;
+      const panel = PANEL_BY_ENTITY_TYPE[detail.type];
+      const key = { RELEASE: "releaseId", ARTIST: "artistId", ASSET: "assetId", LABEL: "labelId" }[detail.type];
+      const query = new URLSearchParams({ panel, ...(detail.id ? { [key]: detail.id } : {}), ...(detail.title ? { title: detail.title } : {}) });
+      navigateWorkbench(`/?${query.toString()}`);
     };
-    window.addEventListener("open-entity", handler as EventListener);
-    return () => window.removeEventListener("open-entity", handler as EventListener);
-  }, []);
+    window.addEventListener("open-entity", handler);
+    return () => window.removeEventListener("open-entity", handler);
+  }, [navigateWorkbench]);
+
+  useEffect(() => {
+    if (!user) return;
+    const restore = () => navigateWorkbench(`${window.location.pathname}${window.location.search}`, false);
+    restore();
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [user, navigateWorkbench]);
+
+  useEffect(() => {
+    if (!pendingEntity?.type) return;
+    const expectedPanel = PANEL_BY_ENTITY_TYPE[pendingEntity.type];
+    if (activePanel !== expectedPanel) return;
+    const frame = window.requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent("open-entity", { detail: { ...pendingEntity, replayed: true } }));
+      setPendingEntity(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activePanel, pendingEntity]);
+
+  useEffect(() => {
+    if (user && !canAccessPanel(user, activePanel)) setActivePanel("dashboard");
+  }, [activePanel, user]);
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    try {
+      await apiRequest("/api/v1/auth/logout", { method: "POST" });
+    } finally {
+      clearAccessToken();
+    }
+    // Drop in-memory stream tokens — they're IP-bound HMACs, but on a shared
+    // device the next signed-in user shouldn't inherit valid URLs for the
+    // previous account's pre-release media.
+    clearStreamTokenCache();
     router.push("/login");
   };
 
   if (!user) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center"
+        className="min-h-[100dvh] flex items-center justify-center"
         style={{ background: "var(--bg-primary)" }}
       >
         <div
@@ -97,7 +238,7 @@ export default function Home() {
   const renderPanel = () => {
     switch (activePanel) {
       case "dashboard":
-        return <DashboardPanel user={user} onNavigate={setActivePanel} />;
+        return <DashboardPanel user={user} onNavigate={navigateWorkbench} />;
       case "catalog":
       case "releases":
         return <ReleasesPanel user={user} defaultMode="AUDIO" />;
@@ -128,28 +269,8 @@ export default function Home() {
       case "playlists":
         return <PlaylistsPanel user={user} />;
       default:
-        return <ReleasesPanel user={user} />;
+        return <DashboardPanel user={user} onNavigate={navigateWorkbench} />;
     }
-  };
-
-  const panelTitles: Record<string, string> = {
-    dashboard: "Home",
-    catalog: "Audio Catalog",
-    releases: "Audio Catalog",
-    vevo: "VEVO Catalog",
-    channels: "Channels",
-    assets: "Assets",
-    labels: "Labels",
-    artists: "Artists",
-    analytics: "Analytics",
-    earnings: "Earnings",
-    entities: "Organizations",
-    distribution: "Distribution",
-    "audit-log": "Audit Log",
-    users: "Users",
-    compositions: "Compositions",
-    playlists: "Playlists",
-    settings: "Settings",
   };
 
   return (
@@ -157,39 +278,40 @@ export default function Home() {
       initialLanguage={user.language || "en"}
       initialCurrency={user.currency || "USD"}
     >
+      <BrandProvider key={`${user.entityId}:${user.tenantId ?? "platform"}`}>
       <ToastProvider>
         <div
-          className="h-screen flex overflow-hidden"
+          className="workbench-shell min-h-[100dvh] h-[100dvh] flex overflow-hidden"
           style={{
             background: "var(--bg-primary)",
             color: "var(--text-primary)",
           }}
         >
-          {/* Sidebar */}
           <Sidebar
             activePanel={activePanel}
             onNavigate={(panel) => {
               if (panel === "settings") {
                 router.push("/settings");
-              } else {
-                setActivePanel(panel);
-              }
+              } else navigateWorkbench(panel);
             }}
             user={user}
             onLogout={handleLogout}
           />
 
-          {/* Main Content */}
-          <main className="flex-1 flex flex-col overflow-hidden">
+          <main className="min-w-0 flex-1 flex flex-col overflow-hidden">
             <TopBar
-              title={panelTitles[activePanel] || activePanel}
-              onNavigate={setActivePanel}
+              user={user}
+              title={PANEL_TITLES[activePanel] || activePanel}
+              onNavigate={(panel) => {
+                navigateWorkbench(panel);
+              }}
               activePanel={activePanel}
             />
-            <div className="flex-1 overflow-y-auto">{renderPanel()}</div>
+            <div className="flex-1 overflow-y-auto overscroll-contain">{renderPanel()}</div>
           </main>
         </div>
       </ToastProvider>
+      </BrandProvider>
     </I18nProvider>
   );
 }

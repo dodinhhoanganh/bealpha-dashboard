@@ -4,6 +4,7 @@ import { translateApiError } from "@/lib/i18n/translateApiError";
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { ApiClientError, apiRequest, getCurrentUser } from "@/lib/api-client";
 import {
   AddIcon,
   EditIcon,
@@ -14,12 +15,12 @@ import {
   PeopleIcon,
   AlbumIcon,
   WarningIcon,
-} from "@/components/Icon";
+} from "@/components/ui/Icon";
 
 interface Label {
   id: string;
   name: string;
-  dpid?: string;
+  dpid?: string | null;
   artistCount: number;
   releaseCount: number;
   createdAt: string;
@@ -71,14 +72,9 @@ export default function LabelsPage() {
   useEffect(() => {
     async function checkPermissions() {
       try {
-        const res = await fetch("/api/auth/me");
-        if (!res.ok) {
-          router.push("/login");
-          return;
-        }
-        const data = await res.json();
-        const userPerms = data.user.permissions || [];
-        const roles = data.user.roles || [];
+        const user = await getCurrentUser();
+        const userPerms = user.permissions || [];
+        const roles = user.roles || [];
 
         setPermissions({
           canCreate: userPerms.includes("label.create"),
@@ -99,15 +95,9 @@ export default function LabelsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-
-      const res = await fetch(`/api/labels?${params}`);
-      if (res.ok) {
-        const result = await res.json();
-        // API returns { data, total, ... } or plain array
-        setLabels(Array.isArray(result) ? result : result.data || []);
-      }
+      const result = await apiRequest<Label[]>("/api/v1/catalog/labels");
+      const query = search.trim().toLowerCase();
+      setLabels(query ? result.filter((label) => label.name.toLowerCase().includes(query)) : result);
     } catch (error) {
       console.error("Error fetching labels:", error);
     } finally {
@@ -142,9 +132,9 @@ export default function LabelsPage() {
     // Validation
     const errors: string[] = [];
     if (!formData.name.trim()) {
-      errors.push("Label Name is required");
+      errors.push(t("common.labelNameRequired"));
     } else if (formData.name.trim().length < 2) {
-      errors.push("Label Name must be at least 2 characters");
+      errors.push(t("common.labelNameMin2"));
     }
     if (errors.length > 0) {
       setFormError(errors.join("\n"));
@@ -154,34 +144,26 @@ export default function LabelsPage() {
     setSaving(true);
 
     try {
-      const url =
+      const path =
         modalMode === "create"
-          ? "/api/labels"
-          : `/api/labels/${selectedLabel?.id}`;
+          ? "/api/v1/catalog/labels"
+          : `/api/v1/catalog/labels/${selectedLabel?.id}`;
 
       const method = modalMode === "create" ? "POST" : "PATCH";
 
-      const res = await fetch(url, {
+      await apiRequest(path, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formData.name,
-          dpid: formData.dpid || null,
+          dpid: formData.dpid || (modalMode === "edit" ? null : undefined),
         }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setFormError(translateApiError(data.error, t));
-        setSaving(false);
-        return;
-      }
-
       setShowModal(false);
       fetchData();
-    } catch {
-      setFormError("An error occurred");
+    } catch (error) {
+      setFormError(error instanceof ApiClientError ? translateApiError(error.code, t) : t("common.errorOccurred"));
     } finally {
       setSaving(false);
     }
@@ -199,20 +181,14 @@ export default function LabelsPage() {
   const handleDelete = async (labelId: string) => {
     setDeleteLoading(true);
     try {
-      const res = await fetch(`/api/labels/${labelId}`, {
+      await apiRequest(`/api/v1/catalog/labels/${labelId}`, {
         method: "DELETE",
       });
-
-      if (res.ok) {
-        setDeleteConfirm(null);
-        setDeleteInfo(null);
-        fetchData();
-      } else {
-        const data = await res.json();
-        alert(translateApiError(data.error, t));
-      }
+      setDeleteConfirm(null);
+      setDeleteInfo(null);
+      fetchData();
     } catch (error) {
-      console.error("Error deleting label:", error);
+      alert(error instanceof ApiClientError ? translateApiError(error.code, t) : t("common.errorOccurred"));
     } finally {
       setDeleteLoading(false);
     }
@@ -238,7 +214,7 @@ export default function LabelsPage() {
               className="flex items-center gap-2 px-4 py-2 bg-[var(--status-info)] hover:brightness-110 rounded-lg transition-all text-sm font-medium text-white"
             >
               <AddIcon size={18} />
-              Add Label
+              {t("common.addLabel")}
             </button>
           )}
         </div>
@@ -277,8 +253,8 @@ export default function LabelsPage() {
           ) : labels.length === 0 ? (
             <div className="text-center py-12 text-[var(--text-tertiary)]">
               {permissions.isLabel
-                ? "Your label is not set up yet."
-                : "No labels found"}
+                ? t("label.notSetUp", "Your label is not set up yet.")
+                : t("labels.noLabels")}
             </div>
           ) : (
             <table className="w-full">
@@ -381,7 +357,7 @@ export default function LabelsPage() {
           >
             <div className="flex items-center justify-between p-6 border-b border-[var(--border-primary)]">
               <h2 className="text-lg font-medium">
-                {modalMode === "create" ? "Add Label" : "Edit Label"}
+                {modalMode === "create" ? t("common.addLabel") : t("labels.editLabel")}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
@@ -400,7 +376,7 @@ export default function LabelsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                  Label Name *
+                  {t("form.labelName", "Label Name *")}
                 </label>
                 <input
                   type="text"
@@ -415,7 +391,7 @@ export default function LabelsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                  DPID (DDEX Party Identifier)
+                  {t("settings.dpidLabel", "DPID (DDEX Party Identifier)")}
                 </label>
                 <input
                   type="text"
@@ -427,7 +403,7 @@ export default function LabelsPage() {
                   className="w-full px-4 py-2 bg-transparent border border-[var(--border-input)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-disabled)] focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <p className="text-xs text-[var(--text-tertiary)] mt-1">
-                  Used for DDEX deliveries. Obtain from DDEX at ddex.net
+                  {t("label.dpidHint", "Used for DDEX deliveries. Obtain from DDEX at ddex.net")}
                 </p>
               </div>
 
@@ -445,10 +421,10 @@ export default function LabelsPage() {
                   className="px-4 py-2 bg-[var(--status-info)] hover:brightness-110 disabled:opacity-50 rounded-lg transition-all text-sm font-medium text-white"
                 >
                   {saving
-                    ? "Saving..."
+                    ? t("common.saving")
                     : modalMode === "create"
-                      ? "Create"
-                      : "Save"}
+                      ? t("common.create")
+                      : t("common.save")}
                 </button>
               </div>
             </form>
@@ -465,31 +441,30 @@ export default function LabelsPage() {
           >
             <h3 className="text-lg font-medium mb-2 text-[var(--status-error)] whitespace-nowrap">
               <WarningIcon size={18} className="inline-block mr-1 -mt-1" />{" "}
-              Delete Label?
+              {t("common.confirmDeleteLabel")}?
             </h3>
             <p className="text-[var(--text-secondary)] text-sm mb-3">
-              Are you sure you want to delete{" "}
+              {t("common.confirmDeleteLabel")}{" "}
               <strong className="text-[var(--text-primary)]">
                 {deleteInfo?.name}
               </strong>
-              ? This action cannot be undone.
+              ? {t("common.cannotBeUndone")}
             </p>
             {deleteInfo &&
               (deleteInfo.artistCount > 0 || deleteInfo.releaseCount > 0) && (
                 <div className="p-3 bg-[var(--status-error-surface)] border border-red-500/20 rounded-lg mb-4">
                   <p className="text-xs text-[var(--status-error)] font-medium mb-2">
-                    The following will also be permanently deleted:
+                    {t("common.deleteWillRemove")}
                   </p>
                   <ul className="text-xs text-red-300 space-y-1">
                     {deleteInfo.artistCount > 0 && (
                       <li>
-                        • {deleteInfo.artistCount} artist(s) under this label
+                        • {deleteInfo.artistCount} {t("ui.page.artistSUnderThisLabel", "artist(s) under this label")}
                       </li>
                     )}
                     {deleteInfo.releaseCount > 0 && (
                       <li>
-                        • {deleteInfo.releaseCount} release(s) and all their
-                        tracks
+                        • {deleteInfo.releaseCount} {t("ui.page.releaseSAndAllTheirTracks", "release(s) and all their tracks")}
                       </li>
                     )}
                     <li>{t("label.deleteWarning", "- All associated audio files and cover art")}</li>
@@ -511,7 +486,7 @@ export default function LabelsPage() {
                 disabled={deleteLoading}
                 className="px-4 py-2 bg-[var(--status-error)] hover:brightness-110 rounded-lg transition-all text-sm font-medium disabled:opacity-50"
               >
-                {deleteLoading ? "Deleting..." : "Delete Everything"}
+                {deleteLoading ? t("common.loading") : t("common.delete")}
               </button>
             </div>
           </div>

@@ -9,35 +9,143 @@ import {
   faCompactDisc,
   faCloudArrowUp,
 } from "@fortawesome/free-solid-svg-icons";
+import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { useTheme } from "@/components/ThemeProvider";
-import NotificationBell from "@/components/NotificationBell";
+import { useTheme } from "@/components/layout/ThemeProvider";
+import NotificationBell from "@/components/ui/NotificationBell";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { useToast } from "@/components/Toast";
+import { searchAcrossServices } from "@/lib/global-search";
+import SecureImage from "@/components/ui/SecureImage";
+import type { UserSession } from "@/lib/types";
 
 interface TopBarProps {
   title?: string;
   subtitle?: string;
   onNavigate: (panel: string) => void;
   activePanel?: string;
+  user: UserSession;
 }
 
-export default function TopBar({ title, subtitle, onNavigate, activePanel = "dashboard" }: TopBarProps) {
+interface SearchResult {
+  id: string;
+  type: string;
+  title: string;
+  subtitle?: string;
+  image?: string;
+}
+
+interface QuickAction {
+  panel: string;
+  label: string;
+  icon: IconDefinition;
+  iconBackground: string;
+  iconColor: string;
+}
+
+const SEARCH_SCOPES: Record<string, string> = {
+  artists: "ARTIST",
+  releases: "RELEASE",
+  assets: "ASSET",
+  labels: "LABEL",
+};
+
+const SEARCH_PLACEHOLDERS: Record<string, { key: string; fallback: string }> = {
+  artists: { key: "artists.search", fallback: "Search artists..." },
+  releases: { key: "releases.search", fallback: "Search releases..." },
+  assets: { key: "assets.search", fallback: "Search assets..." },
+  labels: { key: "labels.search", fallback: "Search labels..." },
+};
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function isSafeThumbnailUrl(value: string): boolean {
+  if (value.startsWith("media-asset:")) return true;
+  if (value.startsWith("/uploads/") || value.startsWith("/api/")) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function SearchResultThumbnail({ item }: { item: SearchResult }) {
+  if (!item.image || !isSafeThumbnailUrl(item.image)) {
+    return (
+      <span className="text-[10px] font-bold text-[var(--text-secondary)]">
+        {item.type.charAt(0) || "?"}
+      </span>
+    );
+  }
+
+  return (
+    <SecureImage
+      src={item.image}
+      alt={item.title}
+      className="block h-full w-full object-cover"
+      loading="lazy"
+    />
+  );
+}
+
+function QuickActionButton({
+  action,
+  onSelect,
+}: {
+  action: QuickAction;
+  onSelect: (panel: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSelect(action.panel)}
+      className="workbench-nav-item w-full flex items-center gap-3 px-3.5 py-2.5 text-sm rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]"
+    >
+      <div
+        className="w-7 h-7 rounded-md flex items-center justify-center"
+        style={{ background: action.iconBackground }}
+      >
+        <FontAwesomeIcon
+          icon={action.icon}
+          className="w-3.5 h-3.5"
+          style={{ color: action.iconColor }}
+        />
+      </div>
+      {action.label}
+    </button>
+  );
+}
+
+export default function TopBar({ title, subtitle, onNavigate, activePanel = "dashboard", user }: TopBarProps) {
   const { theme, toggleTheme } = useTheme();
   const { t } = useI18n();
-  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const quickRef = useRef<HTMLDivElement>(null);
   
-  // Search state
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+  const quickActions: QuickAction[] = user.permissions.includes("release.create") ? [
+    {
+      panel: "catalog",
+      label: t("dashboard.newRelease", "New Release"),
+      icon: faCompactDisc,
+      iconBackground: "var(--accent-surface)",
+      iconColor: "var(--accent)",
+    },
+    {
+      panel: "assets",
+      label: t("assets.newAsset", "Upload Asset"),
+      icon: faCloudArrowUp,
+      iconBackground: "var(--status-info-surface)",
+      iconColor: "var(--status-info)",
+    },
+  ] : [];
 
-  // Close quick actions on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (quickRef.current && !quickRef.current.contains(e.target as Node)) {
@@ -51,72 +159,85 @@ export default function TopBar({ title, subtitle, onNavigate, activePanel = "das
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Debounced search
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    const query = searchQuery.trim();
+    if (!query) {
       setSearchResults([]);
       setSearchDropdownOpen(false);
       return;
     }
 
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        let scope = "ALL";
-        if (activePanel === "artists") scope = "ARTIST";
-        else if (activePanel === "releases") scope = "RELEASE";
-        else if (activePanel === "assets") scope = "ASSET";
-        else if (activePanel === "labels") scope = "LABEL";
-
-        const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}&scope=${scope}`);
-        if (res.ok) {
-          const json = await res.json();
-          setSearchResults(json.data || []);
+        setSearchResults(await searchAcrossServices(query, SEARCH_SCOPES[activePanel] ?? "ALL", controller.signal));
+        setSearchDropdownOpen(true);
+      } catch (error) {
+        if (!isAbortError(error)) {
+          setSearchResults([]);
           setSearchDropdownOpen(true);
         }
-      } catch (err) {
-        console.error("Search failed:", err);
       } finally {
-        setIsSearching(false);
+        if (!controller.signal.aborted) {
+          setIsSearching(false);
+        }
       }
     }, 300);
 
-    return () => clearTimeout(timer);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
   }, [searchQuery, activePanel]);
 
-  const handleResultClick = (item: any) => {
+  const handleResultClick = (item: SearchResult) => {
     setSearchDropdownOpen(false);
     setSearchQuery("");
-    window.dispatchEvent(new CustomEvent("open-entity", { detail: { type: item.type, id: item.id, title: item.title } }));
+    const panel = { RELEASE: "releases", ARTIST: "artists", ASSET: "assets", LABEL: "labels" }[item.type];
+    const key = { RELEASE: "releaseId", ARTIST: "artistId", ASSET: "assetId", LABEL: "labelId" }[item.type];
+    if (panel && key) {
+      const query = new URLSearchParams({ panel, [key]: item.id, title: item.title });
+      onNavigate(`/?${query.toString()}`);
+    }
   };
 
   const getSearchPlaceholder = () => {
-    switch (activePanel) {
-      case "artists": return t("artists.search", "Search artists...");
-      case "releases": return t("releases.search", "Search releases...");
-      case "assets": return t("assets.search", "Search assets...");
-      case "labels": return t("labels.search", "Search labels...");
-      default: return t("common.searchPlaceholder", "Search everything...");
-    }
+    const placeholder = SEARCH_PLACEHOLDERS[activePanel];
+    return placeholder
+      ? t(placeholder.key, placeholder.fallback)
+      : t("common.searchPlaceholder", "Search everything...");
+  };
+
+  const handleQuickAction = (panel: string) => {
+    onNavigate(panel);
+    setQuickActionsOpen(false);
   };
 
   return (
     <header
-      className="sticky top-0 z-30 flex items-center justify-between px-6 shrink-0 glass"
+      className="workbench-commandbar sticky top-0 z-30 flex items-center justify-between pl-16 pr-3 sm:px-5 shrink-0"
       style={{
         height: "var(--topbar-height)",
-        borderBottom: "1px solid var(--border-primary)",
       }}
     >
-      {/* Left — spacer */}
-      <div className="flex-1" />
+      <div className="min-w-0 flex-1">
+        {title && (
+          <h1 className="truncate text-sm font-semibold tracking-[-0.015em] text-[var(--text-primary)]">
+            {title}
+          </h1>
+        )}
+        {subtitle && (
+          <p className="truncate text-xs text-[var(--text-tertiary)]">
+            {subtitle}
+          </p>
+        )}
+      </div>
 
-      {/* Right — Actions */}
       <div className="flex items-center gap-1.5">
-        {/* Search input — pill shape */}
         <div
           ref={searchRef}
-          className={`relative flex items-center transition-all duration-300 mr-3 ${searchFocused || searchDropdownOpen ? "w-[440px]" : "w-[320px]"}`}
+          className="relative hidden w-[320px] items-center sm:flex lg:w-[440px] mr-3"
         >
           <FontAwesomeIcon
             icon={faMagnifyingGlass}
@@ -135,7 +256,7 @@ export default function TopBar({ title, subtitle, onNavigate, activePanel = "das
               if (searchResults.length > 0) setSearchDropdownOpen(true);
             }}
             onBlur={() => setSearchFocused(false)}
-            className="w-full pl-10 pr-4 py-2 rounded-full text-sm transition-all duration-200 focus:outline-none"
+            className="w-full pl-10 pr-9 py-2 rounded-lg text-sm focus:outline-none"
             style={{
               background: searchFocused
                 ? "var(--bg-surface)"
@@ -147,6 +268,7 @@ export default function TopBar({ title, subtitle, onNavigate, activePanel = "das
               boxShadow: searchFocused
                 ? "0 0 0 3px var(--accent-surface)"
                 : "none",
+              transition: "background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast)",
             }}
           />
           {searchQuery && (
@@ -156,51 +278,46 @@ export default function TopBar({ title, subtitle, onNavigate, activePanel = "das
                  setSearchResults([]);
                  setSearchDropdownOpen(false);
               }}
-              className="absolute right-3 text-[var(--text-disabled)] hover:text-[var(--text-secondary)] transition-colors"
+              className="absolute right-3 flex h-6 w-6 items-center justify-center rounded-md text-[var(--text-disabled)] hover:text-[var(--text-secondary)]"
+              aria-label={t("common.clear", "Clear search")}
             >
               ×
             </button>
           )}
 
-          {/* Search Dropdown */}
           {searchDropdownOpen && searchQuery && (
             <div
-              className="absolute right-0 top-full mt-2 w-full rounded-xl overflow-hidden"
+              className="workbench-panel absolute right-0 top-full mt-2 w-full overflow-hidden"
               style={{
                 background: "var(--bg-surface)",
-                border: "1px solid var(--border-primary)",
                 boxShadow: "var(--shadow-lg)",
-                animation: "dropdownIn 0.15s ease-out",
+                animation: "dropdownIn var(--dur-short) var(--ease-out)",
                 maxHeight: "400px",
                 overflowY: "auto",
               }}
             >
               {isSearching ? (
                 <div className="p-4 text-center text-sm" style={{ color: "var(--text-tertiary)" }}>
-                  Searching...
+                  {t("common.searching", "Searching...")}
                 </div>
               ) : searchResults.length === 0 ? (
                 <div className="p-4 text-center text-sm" style={{ color: "var(--text-tertiary)" }}>
-                  No results found.
+                  {t("ui.topBar.noResultsFound", "No results found.")}
                 </div>
               ) : (
                 <div className="py-2">
-                  {searchResults.map((item, idx) => (
+                  {searchResults.map((item) => (
                     <button
-                      key={`${item.type}-${item.id}-${idx}`}
+                      key={`${item.type}-${item.id}`}
                       onClick={() => handleResultClick(item)}
                       className="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-[var(--bg-surface-hover)] transition-colors"
                     >
                       <div className="w-8 h-8 rounded bg-[var(--bg-elevated)] flex-shrink-0 overflow-hidden flex items-center justify-center border border-[var(--border-subtle)]">
-                        {item.image ? (
-                          <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-[10px] font-bold text-[var(--text-secondary)]">{item.type[0]}</span>
-                        )}
+                        <SearchResultThumbnail item={item} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-[var(--text-primary)] truncate">{item.title}</p>
-                        <p className="text-[10px] text-[var(--text-tertiary)] truncate">{item.subtitle}</p>
+                        <p className="text-[10px] text-[var(--text-tertiary)] truncate">{item.subtitle ?? ""}</p>
                       </div>
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-elevated)] text-[var(--text-secondary)]">
                         {item.type}
@@ -213,11 +330,10 @@ export default function TopBar({ title, subtitle, onNavigate, activePanel = "das
           )}
         </div>
 
-        {/* Quick actions */}
-        <div ref={quickRef} className="relative">
+        {quickActions.length > 0 && <div ref={quickRef} className="relative">
           <button
             onClick={() => setQuickActionsOpen(!quickActionsOpen)}
-            className="w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200"
+            className="w-9 h-9 flex items-center justify-center rounded-lg"
             style={{
               color: quickActionsOpen
                 ? "var(--accent-text)"
@@ -244,82 +360,29 @@ export default function TopBar({ title, subtitle, onNavigate, activePanel = "das
           </button>
           {quickActionsOpen && (
             <div
-              className="absolute right-0 top-full mt-2 w-52 rounded-xl overflow-hidden"
+              className="workbench-panel absolute right-0 top-full mt-2 w-52 overflow-hidden"
               style={{
                 background: "var(--bg-surface)",
-                border: "1px solid var(--border-primary)",
                 boxShadow: "var(--shadow-lg)",
-                animation: "dropdownIn 0.15s ease-out",
+                animation: "dropdownIn var(--dur-short) var(--ease-out)",
               }}
             >
               <div className="p-1.5">
-                <button
-                  onClick={() => {
-                    onNavigate("catalog");
-                    setQuickActionsOpen(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm rounded-lg transition-all duration-150"
-                  style={{ color: "var(--text-secondary)" }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background =
-                      "var(--bg-surface-hover)";
-                    e.currentTarget.style.color = "var(--text-primary)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent";
-                    e.currentTarget.style.color = "var(--text-secondary)";
-                  }}
-                >
-                  <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center"
-                    style={{ background: "var(--accent-surface)" }}
-                  >
-                    <FontAwesomeIcon
-                      icon={faCompactDisc}
-                      className="w-3.5 h-3.5"
-                      style={{ color: "var(--accent)" }}
-                    />
-                  </div>
-                  {t("dashboard.newRelease", "New Release")}
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate("assets");
-                    setQuickActionsOpen(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm rounded-lg transition-all duration-150"
-                  style={{ color: "var(--text-secondary)" }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background =
-                      "var(--bg-surface-hover)";
-                    e.currentTarget.style.color = "var(--text-primary)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent";
-                    e.currentTarget.style.color = "var(--text-secondary)";
-                  }}
-                >
-                  <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center"
-                    style={{ background: "var(--status-info-surface)" }}
-                  >
-                    <FontAwesomeIcon
-                      icon={faCloudArrowUp}
-                      className="w-3.5 h-3.5"
-                      style={{ color: "var(--status-info)" }}
-                    />
-                  </div>
-                  {t("assets.newAsset", "Upload Asset")}
-                </button>
+                {quickActions.map((action) => (
+                  <QuickActionButton
+                    key={action.panel}
+                    action={action}
+                    onSelect={handleQuickAction}
+                  />
+                ))}
               </div>
             </div>
           )}
-        </div>
+        </div>}
 
-        {/* Theme toggle */}
         <button
           onClick={toggleTheme}
-          className="w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200"
+          className="w-9 h-9 flex items-center justify-center rounded-lg"
           style={{ color: "var(--text-secondary)" }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = "var(--bg-surface-hover)";
@@ -339,7 +402,6 @@ export default function TopBar({ title, subtitle, onNavigate, activePanel = "das
           />
         </button>
 
-        {/* Notifications */}
         <NotificationBell onNavigate={onNavigate} />
       </div>
     </header>

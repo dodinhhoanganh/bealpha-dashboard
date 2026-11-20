@@ -1,7 +1,6 @@
 "use client";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { useI18n } from "@/lib/i18n/I18nProvider";
 
 import { IconDefinition, SizeProp } from "@fortawesome/fontawesome-svg-core";
 import { faSpotify, faApple } from "@fortawesome/free-brands-svg-icons";
@@ -46,7 +45,6 @@ import {
   faClockRotateLeft,
   faLock,
   faLockOpen,
-  faShieldHalved,
   faBell,
   faBellSlash,
   faGlobe,
@@ -73,10 +71,7 @@ import {
   faHand,
   faArrowUpRightFromSquare,
   faCircle,
-  faChartPie,
-  faFileExport,
   faExclamation,
-  faCircleExclamation,
   faLightbulb,
   faImage,
   faBoxArchive,

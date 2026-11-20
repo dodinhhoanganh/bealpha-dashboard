@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Manrope } from "next/font/google";
 import "./globals.css";
 
 // Font Awesome — prevent FOUT by loading CSS at build time
@@ -7,15 +7,13 @@ import { config } from "@fortawesome/fontawesome-svg-core";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 config.autoAddCss = false;
 
-import { ThemeProvider } from "@/components/ThemeProvider";
-import { UploadProgressProvider } from "@/components/UploadProgress";
+import { ThemeProvider } from "@/components/layout/ThemeProvider";
+import { UploadProgressProvider } from "@/components/ui/UploadProgress";
 import { I18nProvider } from "@/lib/i18n/I18nProvider";
-import { SessionWatcher } from "@/components/SessionWatcher";
-import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { SessionWatcher } from "@/components/layout/SessionWatcher";
 
-const inter = Inter({
-  variable: "--font-inter",
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin", "latin-ext", "vietnamese", "cyrillic"],
   display: "swap",
 });
@@ -25,32 +23,29 @@ export const metadata: Metadata = {
   description: "Music Label & Distribution Management Platform",
 };
 
-export default async function RootLayout({
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+  ],
+};
+
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  let userTheme: "light" | "dark" = "dark";
-  let userLang = "en";
-  const session = await getSession();
-
-  if (session) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.id },
-      select: { theme: true, language: true },
-    });
-    if (user?.theme && (user.theme === "light" || user.theme === "dark")) {
-      userTheme = user.theme;
-    }
-    if (user?.language) {
-      userLang = user.language;
-    }
-  }
+  const userTheme: "light" | "dark" = "dark";
+  const userLang: string = "en";
 
   return (
     <html lang={userLang} dir={userLang === "ar" ? "rtl" : "ltr"} data-theme={userTheme} suppressHydrationWarning>
       <body
-        className={`${inter.variable} antialiased`}
+        className={`${manrope.variable} antialiased`}
         suppressHydrationWarning
       >
         <ThemeProvider initialTheme={userTheme}>

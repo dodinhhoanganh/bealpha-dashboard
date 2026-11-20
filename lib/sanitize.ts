@@ -1,9 +1,8 @@
 /**
  * Input Sanitization Utilities
  *
- * Server-side input sanitization to prevent XSS, injection, and
- * other input-based attacks. Prisma handles SQL injection,
- * but we still need to sanitize for stored XSS and display.
+ * Input sanitization helpers for preventing XSS when displaying
+ * user-controlled text in browser UI.
  */
 
 // ── HTML Sanitization ────────────────────────────────────

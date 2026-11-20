@@ -1,25 +1,28 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/components/ThemeProvider";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { translateApiError } from "@/lib/i18n/translateApiError";
 import { LOCALES } from "@/lib/i18n";
-import type { Locale } from "@/lib/i18n";
 import {
   LockOutlinedIcon,
   VisibilityIcon,
   VisibilityOffIcon,
   EmailIcon,
-  PhoneIcon,
   SecurityIcon,
   MobileIcon,
-  SmsIcon,
   ArrowBackIcon,
 } from "@/components/Icon";
 import InteractiveBackground from "@/components/InteractiveBackground";
+import {
+  ApiClientError,
+  publicApiRequest,
+  startAuthSession,
+} from "@/lib/api-client";
+import { brandCssTokens, DEFAULT_BRAND, type TenantBrand } from "@/lib/tenant-brand";
 
 type Step = "credentials" | "choose-method" | "verify-code";
 type TwoFactorMethod = "email" | "app" | "recovery";
@@ -36,8 +39,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
-  const [isNewLocation, setIsNewLocation] = useState(false);
 
   // 2FA states
   const [availableMethods, setAvailableMethods] = useState<TwoFactorMethod[]>(
@@ -51,9 +52,9 @@ export default function LoginPage() {
   const [maskedContact, setMaskedContact] = useState("");
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [rememberMe, setRememberMe] = useState(false);
+  const [brand, setBrand] = useState<TenantBrand>(DEFAULT_BRAND);
+  const [brandReady, setBrandReady] = useState(false);
 
-  // Device Fingerprint
-  const [hardwareId, setHardwareId] = useState("");
   const [deviceName, setDeviceName] = useState("");
   const [deviceType, setDeviceType] = useState("");
 
@@ -68,17 +69,22 @@ export default function LoginPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Initialize fingerprint on mount
   useEffect(() => {
-    let hwid = localStorage.getItem("bealpha_hwid");
-    if (!hwid) {
-      hwid = crypto.randomUUID
-        ? crypto.randomUUID()
-        : Math.random().toString(36).substring(2);
-      localStorage.setItem("bealpha_hwid", hwid);
-    }
-    setHardwareId(hwid);
+    let cancelled = false;
+    publicApiRequest<TenantBrand>("/api/v1/catalog/public-tenant-brand")
+      .catch(() => DEFAULT_BRAND)
+      .then((resolved) => {
+        if (cancelled) return;
+        setBrand(resolved);
+        for (const [name, value] of Object.entries(brandCssTokens(resolved))) document.documentElement.style.setProperty(name, value);
+        document.title = `${resolved.displayName} - Sign in`;
+        setBrandReady(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
+  // Describe the current device for session management.
+  useEffect(() => {
     const ua = navigator.userAgent;
     let type = "desktop";
     if (
@@ -106,46 +112,28 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-          rememberMe,
-          hardwareId,
-          deviceName,
-          deviceType,
-        }),
+      await startAuthSession("/api/v1/auth/login", {
+        email,
+        password,
+        rememberMe,
+        deviceName,
+        deviceType,
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(translateApiError(data.error, t));
-        setLoading(false);
-        return;
-      }
-
-      if (data.twoFactorRequired) {
-        setAvailableMethods(data.methods || []);
-        setTempToken(data.tempToken);
-
-        if (data.isNewLocation) {
-          setIsNewLocation(true);
-          setSelectedMethod("email");
-          setStep("verify-code");
-        } else {
-          setStep("choose-method");
-        }
+      setTimeout(() => {
+        router.push("/");
+        router.refresh();
+      }, 600);
+    } catch (error) {
+      if (error instanceof ApiClientError && error.code === "TWO_FACTOR_REQUIRED") {
+        const details = error.details as { challengeId?: string; methods?: TwoFactorMethod[] } | undefined;
+        setAvailableMethods(details?.methods ?? []);
+        setTempToken(details?.challengeId ?? "");
+        setStep("choose-method");
+      } else if (error instanceof ApiClientError) {
+        setError(translateApiError(error.code, t));
       } else {
-        setTimeout(() => {
-          router.push("/");
-          router.refresh();
-        }, 600);
+        setError(t("login.errorOccurred"));
       }
-    } catch {
-      setError(t("login.errorOccurred"));
     } finally {
       setLoading(false);
     }
@@ -163,24 +151,15 @@ export default function LoginPage() {
         return;
       }
 
-      const res = await fetch("/api/auth/2fa/send", {
+      const data = await publicApiRequest<{ maskedContact: string }>("/api/v1/auth/2fa/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tempToken, method }),
+        body: JSON.stringify({ challengeId: tempToken, method }),
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(translateApiError(data.error, t));
-        setLoading(false);
-        return;
-      }
-
       setMaskedContact(data.maskedContact || "");
       setStep("verify-code");
-    } catch {
-      setError(t("login.errorOccurred"));
+    } catch (error) {
+      setError(error instanceof ApiClientError ? translateApiError(error.code, t) : t("login.errorOccurred"));
     } finally {
       setLoading(false);
     }
@@ -196,34 +175,19 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/2fa/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tempToken,
-          code: verificationCode,
-          method: selectedMethod,
-          rememberMe,
-          hardwareId,
-          deviceType,
-          deviceName,
-        }),
+      await startAuthSession("/api/v1/auth/2fa/verify", {
+        challengeId: tempToken,
+        code: verificationCode,
+        method: selectedMethod,
+        deviceType,
+        deviceName,
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(translateApiError(data.error, t));
-        setLoading(false);
-        return;
-      }
-
       setTimeout(() => {
         router.push("/");
         router.refresh();
       }, 600);
-    } catch {
-      setError(t("login.errorOccurred"));
+    } catch (error) {
+      setError(error instanceof ApiClientError ? translateApiError(error.code, t) : t("login.errorOccurred"));
     } finally {
       setLoading(false);
     }
@@ -235,18 +199,13 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/2fa/send", {
+      await publicApiRequest("/api/v1/auth/2fa/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tempToken, method: selectedMethod }),
+        body: JSON.stringify({ challengeId: tempToken, method: selectedMethod }),
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(translateApiError(data.error, t));
-      }
-    } catch {
-      setError(t("login.errorOccurred"));
+    } catch (error) {
+      setError(error instanceof ApiClientError ? translateApiError(error.code, t) : t("login.errorOccurred"));
     } finally {
       setLoading(false);
     }
@@ -323,11 +282,11 @@ export default function LoginPage() {
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
           </svg>
           {LOCALES.find((l) => l.code === language)?.nativeName || "English"}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform duration-200 ${langOpen ? "rotate-180" : ""}`}>
-            <path d="M6 9l6 6 6-6" />
+            <path d="M6 9l6 6 6-6"/>
           </svg>
         </button>
 
@@ -349,15 +308,16 @@ export default function LoginPage() {
                   setLanguage(locale.code);
                   setLangOpen(false);
                 }}
-                className={`w-full text-left px-4 py-2.5 text-sm transition-colors duration-150 flex items-center justify-between ${language === locale.code
+                className={`w-full text-left px-4 py-2.5 text-sm transition-colors duration-150 flex items-center justify-between ${
+                  language === locale.code
                     ? "text-white bg-white/10"
                     : "text-white/70 hover:text-white hover:bg-white/5"
-                  }`}
+                }`}
               >
                 <span>{locale.nativeName}</span>
                 {language === locale.code && (
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 13l4 4L19 7" />
+                    <path d="M5 13l4 4L19 7"/>
                   </svg>
                 )}
               </button>
@@ -366,16 +326,22 @@ export default function LoginPage() {
         )}
       </div>
 
+      {!brandReady && <div role="status" aria-label={t("common.loading", "Loading")} className="absolute inset-0 z-30 bg-[var(--bg-primary)]" />}
+
       {/* ═══════════ Floating Logo ═══════════ */}
       <div className="absolute top-12 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center w-[500px] h-[100px]">
-        <img
+        <Image
           src={
-            theme === "dark"
-              ? "/Logo (White, Transparent).png"
-              : "/Logo (Black, Transparent).png"
+            brand.logoUrl ?? (theme === "dark"
+              ? "/logo-white.png"
+              : "/logo-black.png")
           }
-          alt="beAlpha Logo"
-          className="w-[360px] h-auto object-contain"
+          alt={`${brand.displayName} logo`}
+          width={360}
+          height={80}
+          priority
+          unoptimized
+          className={brand.logoUrl ? "h-20 w-[360px] object-contain" : "h-auto w-[360px] object-contain"}
           style={{
             filter:
               theme === "dark"
@@ -386,8 +352,7 @@ export default function LoginPage() {
       </div>
 
       {/* ═══════════ Login Card ═══════════ */}
-      {/* Glassmorphism Login Card */}
-      <div className="relative w-full max-w-md p-8 md:p-10 rounded-[2rem] shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] backdrop-blur-2xl bg-transparent border border-white/20 dark:border-white/10 z-10 mx-4">
+      <div className="relative z-10 mx-4 w-full max-w-md rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-surface)] p-8 shadow-xl md:p-10">
         {/* Step title */}
         <div className="mb-6 text-center">
           <h2
@@ -482,8 +447,6 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                onFocus={() => setFocusedField("email")}
-                onBlur={() => setFocusedField(null)}
                 required
                 autoComplete="email"
                 className="input-field"
@@ -505,8 +468,6 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  onFocus={() => setFocusedField("password")}
-                  onBlur={() => setFocusedField(null)}
                   required
                   autoComplete="current-password"
                   className="input-field pr-12 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
@@ -644,12 +605,10 @@ export default function LoginPage() {
                 <LockOutlinedIcon size={40} />
               </div>
               <h3 className="text-2xl font-bold text-white tracking-tight mb-2">
-                {isNewLocation ? t("login.newLocationDetected") : t("login.securityCheck")}
+                {t("login.securityCheck")}
               </h3>
               <p className="text-sm text-white/70">
-                {isNewLocation
-                  ? t("login.newLocationDesc")
-                  : selectedMethod === "app"
+                {selectedMethod === "app"
                     ? t("login.enterAuthCode")
                     : selectedMethod === "recovery"
                       ? t("login.enterRecoveryCode")
@@ -819,25 +778,25 @@ export default function LoginPage() {
             {(selectedMethod === "app" ||
               (selectedMethod !== "recovery" &&
                 availableMethods.includes("app"))) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVerificationCode("");
-                    setSelectedMethod("recovery");
-                  }}
-                  disabled={loading}
-                  className="w-full text-center text-sm transition-colors duration-200 disabled:opacity-50 mt-2"
-                  style={{ color: "var(--accent-text)" }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.color = "var(--accent)")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.color = "var(--accent-text)")
-                  }
-                >
-                  {t("login.useRecoveryCode")}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setVerificationCode("");
+                  setSelectedMethod("recovery");
+                }}
+                disabled={loading}
+                className="w-full text-center text-sm transition-colors duration-200 disabled:opacity-50 mt-2"
+                style={{ color: "var(--accent-text)" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.color = "var(--accent)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.color = "var(--accent-text)")
+                }
+              >
+                {t("login.useRecoveryCode")}
+              </button>
+            )}
           </form>
         )}
       </div>
@@ -845,7 +804,8 @@ export default function LoginPage() {
       {/* ═══════════ Footer / Copyright ═══════════ */}
       <div className="absolute bottom-6 left-0 right-0 text-center z-20">
         <p className="text-[12px] font-normal text-slate-500 drop-shadow-md">
-          &copy; 2021 - {new Date().getFullYear()} beAlpha. {t("login.copyright")}
+          &copy; {new Date().getFullYear()} {brand.displayName}. {t("login.copyright")}
+          {brand.supportUrl ? <> · <a href={brand.supportUrl} className="underline underline-offset-2">{t("common.support", "Support")}</a></> : brand.supportEmail ? <> · <a href={`mailto:${brand.supportEmail}`} className="underline underline-offset-2">{t("common.support", "Support")}</a></> : null}
         </p>
       </div>
     </div>

@@ -14,11 +14,16 @@ const config = {
     "^@/(.*)$": "<rootDir>/$1",
   },
   testPathIgnorePatterns: ["/node_modules/", "/.next/", "/tests/e2e/"],
+  modulePathIgnorePatterns: [
+    "<rootDir>/.next/",
+    "<rootDir>/.next-codex/",
+    "<rootDir>/.next-codex-final/",
+    "<rootDir>/.next-final/",
+    "<rootDir>/.next-microservices/",
+  ],
   coverageDirectory: "coverage",
   collectCoverageFrom: [
     "lib/**/*.ts",
-    "app/api/**/*.ts",
-    "!lib/prisma.ts",
     "!**/*.d.ts",
   ],
   testMatch: [
