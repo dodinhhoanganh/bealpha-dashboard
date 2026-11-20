@@ -1,0 +1,13 @@
+{
+  "platformBaseUrl": "https://platform.example.com",
+  "brand": {
+    "displayName": "Example Music",
+    "logoAssetId": null,
+    "accentColor": "#172554",
+    "accentTextColor": "#FFFFFF",
+    "supportEmail": "support@example.com",
+    "supportUrl": "https://example.com/support",
+    "defaultLocale": "vi"
+  },
+  "hostname": "music.example.com"
+}

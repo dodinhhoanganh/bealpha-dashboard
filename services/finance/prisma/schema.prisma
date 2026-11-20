@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/finance-prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ImportStatus {
+  PENDING
+  UPLOADING
+  QUEUED
+  PROCESSING
+  COMPLETE
+  FAILED
+  EXPIRED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
+model FinanceImport {
+  id          String       @id @default(uuid()) @db.Uuid
+  platform    String       @db.VarChar(100)
+  period      String       @db.VarChar(64)
+  currency    String       @db.Char(3)
+  fileName    String       @map("file_name") @db.VarChar(255)
+  contentType String       @map("content_type") @db.VarChar(64)
+  sizeBytes   BigInt       @map("size_bytes")
+  sha256      String       @db.Char(64)
+  tokenHash   String       @unique @map("token_hash") @db.Char(64)
+  storageKey  String       @unique @map("storage_key") @db.VarChar(1024)
+  actorId     String       @map("actor_id") @db.Uuid
+  requestId   String       @map("request_id") @db.Uuid
+  status      ImportStatus @default(PENDING)
+  expiresAt   DateTime     @map("expires_at")
+  consumedAt  DateTime?    @map("consumed_at")
+  failureCode String?      @map("failure_code") @db.VarChar(100)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  job         FinanceJob?
+
+  @@unique([platform, period, sha256])
+  @@index([status, expiresAt])
+  @@map("finance_imports")
+}
+
+model RoyaltyReport {
+  id           String    @id @default(uuid()) @db.Uuid
+  importId     String    @unique @map("import_id") @db.Uuid
+  period       String    @db.VarChar(64)
+  platform     String    @db.VarChar(100)
+  totalRevenue Decimal   @default(0) @map("total_revenue") @db.Decimal(38, 18)
+  totalPlays   BigInt    @default(0) @map("total_plays")
+  currency     String    @db.Char(3)
+  status       String    @default("processed") @db.VarChar(20)
+  receivedAt   DateTime  @default(now()) @map("received_at")
+  processedAt  DateTime? @map("processed_at")
+  lineItems    RoyaltyLineItem[]
+
+  @@unique([period, platform, currency])
+  @@index([receivedAt])
+  @@map("royalty_reports")
+}
+
+model RoyaltyLineItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  reportId   String   @map("report_id") @db.Uuid
+  sourceRow  BigInt   @map("source_row")
+  isrc       String?  @db.Char(12)
+  trackName  String?  @map("track_name") @db.VarChar(500)
+  plays      BigInt   @default(0)
+  revenue    Decimal  @db.Decimal(38, 18)
+  country    String?  @db.Char(2)
+  tenantId   String?  @map("tenant_id") @db.Uuid
+  entityPath String?  @map("entity_path") @db.VarChar(2048)
+  report     RoyaltyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  allocations RoyaltyAllocation[]
+
+  @@unique([reportId, sourceRow])
+  @@index([isrc])
+  @@index([entityPath, reportId])
+  @@index([tenantId, reportId])
+  @@map("royalty_line_items")
+}
+
+model SplitRule {
+  entityPath          String   @id @map("entity_path") @db.VarChar(2048)
+  retainedBasisPoints Int      @map("retained_basis_points")
+  updatedById         String   @map("updated_by_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  @@map("split_rules")
+}
+
+model RoyaltyAllocation {
+  id              String   @id @default(uuid()) @db.Uuid
+  reportId        String   @map("report_id") @db.Uuid
+  sourceRow       BigInt   @map("source_row")
+  beneficiaryPath String  @map("beneficiary_path") @db.VarChar(2048)
+  amount          Decimal  @db.Decimal(38, 18)
+  lineItem        RoyaltyLineItem @relation(fields: [reportId, sourceRow], references: [reportId, sourceRow], onDelete: Cascade)
+  @@unique([reportId, sourceRow, beneficiaryPath])
+  @@index([beneficiaryPath, reportId])
+  @@map("royalty_allocations")
+}
+
+model TrackScope {
+  isrc       String   @id @db.Char(12)
+  tenantId   String   @map("tenant_id") @db.Uuid
+  entityPath String   @map("entity_path") @db.VarChar(2048)
+  trackId    String   @map("track_id") @db.Uuid
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([entityPath])
+  @@map("track_scopes")
+}
+
+model FinanceJob {
+  id          String    @id @default(uuid()) @db.Uuid
+  importId    String    @unique @map("import_id") @db.Uuid
+  status      JobStatus @default(PENDING)
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now()) @map("available_at")
+  lockedAt    DateTime? @map("locked_at")
+  lastError   String?   @map("last_error") @db.VarChar(1000)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  financeImport FinanceImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@map("finance_jobs")
+}
+
+model ConsumedEvent {
+  eventId    String   @id @map("event_id") @db.Uuid
+  eventType  String   @map("event_type") @db.VarChar(100)
+  consumedAt DateTime @default(now()) @map("consumed_at")
+  @@map("consumed_events")
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  eventId     String    @unique @map("event_id") @db.Uuid
+  version     Int       @default(1)
+  type        String    @db.VarChar(100)
+  occurredAt  DateTime  @default(now()) @map("occurred_at")
+  requestId   String    @map("request_id") @db.Uuid
+  actorId     String?   @map("actor_id") @db.Uuid
+  tenantId    String?   @map("tenant_id") @db.Uuid
+  entityPath  String?   @map("entity_path") @db.VarChar(2048)
+  payload     Json
+  publishedAt DateTime? @map("published_at")
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error") @db.VarChar(500)
+  @@index([publishedAt, occurredAt])
+  @@map("outbox_events")
+}

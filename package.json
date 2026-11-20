@@ -1,0 +1,39 @@
+{
+  "name": "bealpha-platform",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "services/*"
+  ],
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "build": "npm --prefix packages/contracts run build && npm --prefix services/gateway run build && npm --prefix services/identity run build && npm --prefix services/catalog run build && npm --prefix services/media run build && npm --prefix services/distribution run build && npm --prefix services/finance run build && npm --prefix services/notifications run build && npm --prefix services/analytics run build && npm --prefix services/audit run build",
+    "test": "npm --prefix packages/contracts run test && npm --prefix services/gateway run test && npm --prefix services/identity run test && npm --prefix services/catalog run test && npm --prefix services/media run test && npm --prefix services/distribution run test && npm --prefix services/finance run test && npm --prefix services/notifications run test && npm --prefix services/analytics run test && npm --prefix services/audit run test",
+    "audit:prod": "npm audit --omit=dev --omit=optional --prefix packages/contracts && npm audit --omit=dev --omit=optional --prefix services/gateway && npm audit --omit=dev --omit=optional --prefix services/identity && npm audit --omit=dev --omit=optional --prefix services/catalog && npm audit --omit=dev --omit=optional --prefix services/media && npm audit --omit=dev --omit=optional --prefix services/distribution && npm audit --omit=dev --omit=optional --prefix services/finance && npm audit --omit=dev --omit=optional --prefix services/notifications && npm audit --omit=dev --omit=optional --prefix services/analytics && npm audit --omit=dev --omit=optional --prefix services/audit",
+    "typecheck": "npm --prefix packages/contracts run typecheck && npm --prefix services/gateway run typecheck && npm --prefix services/identity run typecheck && npm --prefix services/catalog run typecheck && npm --prefix services/media run typecheck && npm --prefix services/distribution run typecheck && npm --prefix services/finance run typecheck && npm --prefix services/notifications run typecheck && npm --prefix services/analytics run typecheck && npm --prefix services/audit run typecheck",
+    "typecheck:migrations": "tsc -p tsconfig.migrations.json --noEmit",
+    "test:migrations": "tsx --test scripts/tests/*.test.ts",
+    "migrate:identity": "tsx scripts/migrate-identity.ts",
+    "migrate:catalog": "tsx scripts/migrate-catalog.ts",
+    "migrate:media": "tsx scripts/migrate-media.ts",
+    "migrate:distribution": "tsx scripts/migrate-distribution.ts",
+    "migrate:finance": "tsx scripts/migrate-finance.ts",
+    "migrate:notifications": "tsx scripts/migrate-notifications.ts",
+    "migrate:analytics": "tsx scripts/migrate-analytics.ts",
+    "migrate:audit": "tsx scripts/migrate-audit.ts",
+    "migrate:verify": "tsx scripts/verify-migration.ts",
+    "white-label:configure": "tsx scripts/configure-white-label.ts"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@types/pg": "^8.15.4",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

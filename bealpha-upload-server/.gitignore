@@ -1,0 +1,35 @@
+# Local configuration; publish only the named templates.
+.env*
+*.env
+.envrc
+!.env.example
+!.env.microservices.example
+!.env.migration.example
+
+# Installed dependencies and generated output
+node_modules/
+.next/
+.next-*/
+out/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local credentials, media, logs and backups
+*.pem
+*.key
+*.p12
+*.pfx
+certs/
+uploads/
+*.log
+*.bak
+*.bak.*
+.task-transaction/
+.hallmark/
+.DS_Store
+Thumbs.db

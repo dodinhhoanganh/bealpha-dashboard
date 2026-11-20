@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/audit-prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  eventId    String   @unique @map("event_id") @db.Uuid
+  requestId  String   @map("request_id") @db.Uuid
+  eventType  String   @map("event_type") @db.VarChar(100)
+  action     String   @db.VarChar(32)
+  entityType String   @map("entity_type") @db.VarChar(64)
+  entityId   String?  @map("entity_id") @db.VarChar(128)
+  actorId    String?  @map("actor_id") @db.Uuid
+  tenantId   String?  @map("tenant_id") @db.Uuid
+  entityPath String?  @map("entity_path") @db.VarChar(2048)
+  details    Json?
+  occurredAt DateTime @map("occurred_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityPath, occurredAt])
+  @@index([action, occurredAt])
+  @@index([entityType, occurredAt])
+  @@map("audit_events")
+}

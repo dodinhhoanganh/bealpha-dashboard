@@ -1,0 +1,4 @@
+name: bealpha
+
+include:
+  - path: ./docker-compose.microservices.yml

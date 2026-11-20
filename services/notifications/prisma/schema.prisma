@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/notification-prisma"
+}
+datasource db {
+  provider = "postgresql"
+}
+enum DeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  DLQ
+}
+model EmailDelivery {
+  id                String @id @default(uuid()) @db.Uuid
+  eventId           String @unique @map("event_id") @db.Uuid
+  requestId         String @map("request_id") @db.Uuid
+  actorId           String? @map("actor_id") @db.Uuid
+  tenantId          String? @map("tenant_id") @db.Uuid
+  entityPath        String? @map("entity_path") @db.VarChar(2048)
+  recipient         String @db.VarChar(254)
+  template          String @db.VarChar(64)
+  locale            String @db.VarChar(10)
+  variablesCiphertext String @map("variables_ciphertext") @db.Text
+  variablesIv       String @map("variables_iv") @db.VarChar(64)
+  variablesAuthTag  String @map("variables_auth_tag") @db.VarChar(64)
+  status            DeliveryStatus @default(PENDING)
+  attempts          Int @default(0)
+  availableAt       DateTime @default(now()) @map("available_at")
+  lockedAt          DateTime? @map("locked_at")
+  sentAt            DateTime? @map("sent_at")
+  providerMessageId String? @map("provider_message_id") @db.VarChar(500)
+  lastError         String? @map("last_error") @db.VarChar(1000)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  deadLetter        DeadLetter?
+  @@index([status, availableAt])
+  @@map("email_deliveries")
+}
+model DeadLetter {
+  id         String @id @default(uuid()) @db.Uuid
+  deliveryId String @unique @map("delivery_id") @db.Uuid
+  reason     String @db.VarChar(1000)
+  failedAt   DateTime @default(now()) @map("failed_at")
+  delivery   EmailDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  @@index([failedAt])
+  @@map("dead_letters")
+}
+model Notification {
+  id        String @id @default(uuid()) @db.Uuid
+  eventId   String? @unique @map("event_id") @db.Uuid
+  userId    String? @map("user_id") @db.Uuid
+  entityPath String? @map("entity_path") @db.VarChar(2048)
+  type      String @db.VarChar(64)
+  title     String @db.VarChar(255)
+  message   String @db.VarChar(2000)
+  read      Boolean @default(false)
+  link      String? @db.VarChar(255)
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  receipts  NotificationReceipt[]
+  @@index([userId, read, createdAt])
+  @@index([entityPath, createdAt])
+  @@map("notifications")
+}
+
+model NotificationReceipt {
+  notificationId String       @map("notification_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  readAt         DateTime?    @map("read_at")
+  dismissedAt    DateTime?    @map("dismissed_at")
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, userId])
+  @@index([userId, dismissedAt])
+  @@map("notification_receipts")
+}

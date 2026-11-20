@@ -1,0 +1,1574 @@
+name: bealpha-microservices
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-watch-dashboard: &watch-dashboard
+  watch:
+    - action: rebuild
+      path: ./bealpha-dashboard
+      ignore: [node_modules/, .next/, tests/]
+
+x-watch-gateway: &watch-gateway
+  watch:
+    - action: rebuild
+      path: ./services/gateway
+      ignore: [node_modules/, dist/, tests/]
+    - action: rebuild
+      path: ./packages/contracts
+      ignore: [node_modules/, dist/, tests/]
+
+x-watch-identity: &watch-identity
+  watch:
+    - action: rebuild
+      path: ./services/identity
+      ignore: [node_modules/, dist/, tests/]
+    - action: rebuild
+      path: ./packages/contracts
+      ignore: [node_modules/, dist/, tests/]
+
+x-watch-catalog: &watch-catalog
+  watch:
+    - action: rebuild
+      path: ./services/catalog
+      ignore: [node_modules/, dist/, tests/]
+    - action: rebuild
+      path: ./packages/contracts
+      ignore: [node_modules/, dist/, tests/]
+
+x-watch-media: &watch-media
+  watch:
+    - action: rebuild
+      path: ./services/media
+      ignore: [node_modules/, dist/, tests/]
+    - action: rebuild
+      path: ./packages/contracts
+      ignore: [node_modules/, dist/, tests/]
+
+x-watch-distribution: &watch-distribution
+  watch:
+    - action: rebuild
+      path: ./services/distribution
+      ignore: [node_modules/, dist/, tests/]
+    - action: rebuild
+      path: ./packages/contracts
+      ignore: [node_modules/, dist/, tests/]
+
+x-watch-finance: &watch-finance
+  watch:
+    - action: rebuild
+      path: ./services/finance
+      ignore: [node_modules/, dist/, tests/]
+    - action: rebuild
+      path: ./packages/contracts
+      ignore: [node_modules/, dist/, tests/]
+
+x-watch-notifications: &watch-notifications
+  watch:
+    - action: rebuild
+      path: ./services/notifications
+      ignore: [node_modules/, dist/, tests/]
+    - action: rebuild
+      path: ./packages/contracts
+      ignore: [node_modules/, dist/, tests/]
+
+x-watch-analytics: &watch-analytics
+  watch:
+    - action: rebuild
+      path: ./services/analytics
+      ignore: [node_modules/, dist/, tests/]
+    - action: rebuild
+      path: ./packages/contracts
+      ignore: [node_modules/, dist/, tests/]
+
+x-watch-audit: &watch-audit
+  watch:
+    - action: rebuild
+      path: ./services/audit
+      ignore: [node_modules/, dist/, tests/]
+    - action: rebuild
+      path: ./packages/contracts
+      ignore: [node_modules/, dist/, tests/]
+
+services:
+  dashboard:
+    develop: *watch-dashboard
+    pull_policy: build
+    build:
+      context: ./bealpha-dashboard
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    expose:
+      - "3000"
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /app/.next/cache:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/login"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 128
+    stop_grace_period: 20s
+    logging: *default-logging
+
+  postgres:
+    image: bealpha-postgres:local
+    build:
+      context: .
+      dockerfile: gateway/postgres.Dockerfile
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: bealpha_admin
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD must be set}
+      IDENTITY_DB_PASSWORD: ${IDENTITY_DB_PASSWORD:?IDENTITY_DB_PASSWORD must be set}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?CATALOG_DB_PASSWORD must be set}
+      MEDIA_DB_PASSWORD: ${MEDIA_DB_PASSWORD:?MEDIA_DB_PASSWORD must be set}
+      DISTRIBUTION_DB_PASSWORD: ${DISTRIBUTION_DB_PASSWORD:?DISTRIBUTION_DB_PASSWORD must be set}
+      FINANCE_DB_PASSWORD: ${FINANCE_DB_PASSWORD:?FINANCE_DB_PASSWORD must be set}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD must be set}
+      ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD:?ANALYTICS_DB_PASSWORD must be set}
+      AUDIT_DB_PASSWORD: ${AUDIT_DB_PASSWORD:?AUDIT_DB_PASSWORD must be set}
+    volumes:
+      - microservices_postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - backend
+      - migration
+    security_opt:
+      - no-new-privileges:true
+    shm_size: 256m
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 256
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 8192
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - microservices_redis_data:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+    networks:
+      - backend
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 640m
+    cpus: 1.0
+    pids_limit: 128
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 8192
+    stop_grace_period: 15s
+    logging: *default-logging
+
+  migration-runner:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: Dockerfile.migrations
+    profiles:
+      - migration
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      LEGACY_DATABASE_URL: ${LEGACY_DATABASE_URL:?LEGACY_DATABASE_URL must be set}
+      IDENTITY_DATABASE_URL: postgresql://identity_service:${IDENTITY_DB_PASSWORD:?IDENTITY_DB_PASSWORD must be set}@postgres:5432/bealpha_identity
+      CATALOG_DATABASE_URL: postgresql://catalog_service:${CATALOG_DB_PASSWORD:?CATALOG_DB_PASSWORD must be set}@postgres:5432/bealpha_catalog
+      MEDIA_DATABASE_URL: postgresql://media_service:${MEDIA_DB_PASSWORD:?MEDIA_DB_PASSWORD must be set}@postgres:5432/bealpha_media
+      DISTRIBUTION_DATABASE_URL: postgresql://distribution_service:${DISTRIBUTION_DB_PASSWORD:?DISTRIBUTION_DB_PASSWORD must be set}@postgres:5432/bealpha_distribution
+      FINANCE_DATABASE_URL: postgresql://finance_service:${FINANCE_DB_PASSWORD:?FINANCE_DB_PASSWORD must be set}@postgres:5432/bealpha_finance
+      NOTIFICATION_DATABASE_URL: postgresql://notification_service:${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD must be set}@postgres:5432/bealpha_notifications
+      ANALYTICS_DATABASE_URL: postgresql://analytics_service:${ANALYTICS_DB_PASSWORD:?ANALYTICS_DB_PASSWORD must be set}@postgres:5432/bealpha_analytics
+      AUDIT_DATABASE_URL: postgresql://audit_service:${AUDIT_DB_PASSWORD:?AUDIT_DB_PASSWORD must be set}@postgres:5432/bealpha_audit
+      LEGACY_MEDIA_ROOT: /legacy-media
+      MEDIA_STORAGE_ROOT: /media-data
+      MIGRATION_SYSTEM_ACTOR_ID: ${MIGRATION_SYSTEM_ACTOR_ID:?MIGRATION_SYSTEM_ACTOR_ID must be set}
+      MIGRATION_MAINTENANCE_CONFIRMED: ${MIGRATION_MAINTENANCE_CONFIRMED:-NO}
+      MIGRATION_DRY_RUN: ${MIGRATION_DRY_RUN:-1}
+      MIGRATION_VERIFY_REPORT: /output/migration-verification.json
+    networks:
+      - migration
+    volumes:
+      - ${LEGACY_MEDIA_HOST_ROOT:?LEGACY_MEDIA_HOST_ROOT must be set}:/legacy-media:ro
+      - microservices_media_data:/media-data
+      - ./.migration-output:/output
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    user: node
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging: *default-logging
+
+  migration-backup:
+    image: postgres:16-alpine
+    profiles:
+      - migration
+    environment:
+      LEGACY_DATABASE_URL: ${LEGACY_DATABASE_URL:?LEGACY_DATABASE_URL must be set}
+    networks:
+      - migration
+    volumes:
+      - ${MIGRATION_BACKUP_HOST_ROOT:-./.cutover-backups}:/backups
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    logging: *default-logging
+
+  gateway:
+    develop: *watch-gateway
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      identity:
+        condition: service_healthy
+      catalog:
+        condition: service_healthy
+      media:
+        condition: service_healthy
+      distribution:
+        condition: service_healthy
+      finance:
+        condition: service_healthy
+      notifications:
+        condition: service_healthy
+      analytics:
+        condition: service_healthy
+      audit:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: 4000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY_HOPS: 1
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS must be set}
+      GATEWAY_BODY_LIMIT_BYTES: ${GATEWAY_BODY_LIMIT_BYTES:-1048576}
+      GATEWAY_UPSTREAM_TIMEOUT_MS: ${GATEWAY_UPSTREAM_TIMEOUT_MS:-15000}
+      GATEWAY_RATE_LIMIT_MAX: ${GATEWAY_RATE_LIMIT_MAX:-120}
+      GATEWAY_RATE_LIMIT_WINDOW_MS: ${GATEWAY_RATE_LIMIT_WINDOW_MS:-60000}
+      GATEWAY_PLATFORM_HOSTNAMES: ${GATEWAY_PLATFORM_HOSTNAMES:?GATEWAY_PLATFORM_HOSTNAMES must be set}
+      GATEWAY_TENANT_DOMAIN_CACHE_TTL_SECONDS: ${GATEWAY_TENANT_DOMAIN_CACHE_TTL_SECONDS:-30}
+      GATEWAY_ACCESS_TOKEN_PUBLIC_KEY_B64: ${GATEWAY_ACCESS_TOKEN_PUBLIC_KEY_B64:?GATEWAY_ACCESS_TOKEN_PUBLIC_KEY_B64 must be set}
+      GATEWAY_ACCESS_TOKEN_ISSUER: ${GATEWAY_ACCESS_TOKEN_ISSUER:-bealpha-identity}
+      GATEWAY_ACCESS_TOKEN_AUDIENCE: ${GATEWAY_ACCESS_TOKEN_AUDIENCE:-bealpha-api}
+      GATEWAY_INTERNAL_CONTEXT_PRIVATE_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PRIVATE_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PRIVATE_KEY_B64 must be set}
+      GATEWAY_INTERNAL_CONTEXT_ISSUER: ${GATEWAY_INTERNAL_CONTEXT_ISSUER:-bealpha-gateway}
+      GATEWAY_INTERNAL_CONTEXT_AUDIENCE: ${GATEWAY_INTERNAL_CONTEXT_AUDIENCE:-bealpha-services}
+      GATEWAY_INTERNAL_CONTEXT_TTL_SECONDS: ${GATEWAY_INTERNAL_CONTEXT_TTL_SECONDS:-30}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      IDENTITY_SERVICE_URL: http://identity:4101
+      CATALOG_SERVICE_URL: http://catalog:4102
+      MEDIA_SERVICE_URL: http://media:4103
+      DISTRIBUTION_SERVICE_URL: http://distribution:4104
+      FINANCE_SERVICE_URL: http://finance:4105
+      NOTIFICATION_SERVICE_URL: http://notifications:4106
+      ANALYTICS_SERVICE_URL: http://analytics:4107
+      AUDIT_SERVICE_URL: http://audit:4108
+    expose:
+      - "4000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - edge
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 8192
+    stop_grace_period: 15s
+    logging: *default-logging
+
+  identity-migrate:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/identity/Dockerfile
+      target: migration
+    restart: "on-failure:3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      IDENTITY_DATABASE_URL: postgresql://identity_service:${IDENTITY_DB_PASSWORD:?IDENTITY_DB_PASSWORD must be set}@postgres:5432/bealpha_identity
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    user: node
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging: *default-logging
+
+  identity:
+    develop: *watch-identity
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/identity/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      identity-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      IDENTITY_HOST: 0.0.0.0
+      IDENTITY_PORT: 4101
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY_HOPS: 1
+      IDENTITY_DATABASE_URL: postgresql://identity_service:${IDENTITY_DB_PASSWORD:?IDENTITY_DB_PASSWORD must be set}@postgres:5432/bealpha_identity
+      IDENTITY_DB_POOL_MAX: ${IDENTITY_DB_POOL_MAX:-10}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      IDENTITY_ACCESS_TOKEN_PRIVATE_KEY_B64: ${IDENTITY_ACCESS_TOKEN_PRIVATE_KEY_B64:?IDENTITY_ACCESS_TOKEN_PRIVATE_KEY_B64 must be set}
+      IDENTITY_ACCESS_TOKEN_ISSUER: ${GATEWAY_ACCESS_TOKEN_ISSUER:-bealpha-identity}
+      IDENTITY_ACCESS_TOKEN_AUDIENCE: ${GATEWAY_ACCESS_TOKEN_AUDIENCE:-bealpha-api}
+      IDENTITY_ACCESS_TOKEN_TTL_SECONDS: ${IDENTITY_ACCESS_TOKEN_TTL_SECONDS:-900}
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+      GATEWAY_INTERNAL_CONTEXT_ISSUER: ${GATEWAY_INTERNAL_CONTEXT_ISSUER:-bealpha-gateway}
+      GATEWAY_INTERNAL_CONTEXT_AUDIENCE: ${GATEWAY_INTERNAL_CONTEXT_AUDIENCE:-bealpha-services}
+      IDENTITY_REFRESH_TTL_SECONDS: ${IDENTITY_REFRESH_TTL_SECONDS:-604800}
+      IDENTITY_REMEMBER_REFRESH_TTL_SECONDS: ${IDENTITY_REMEMBER_REFRESH_TTL_SECONDS:-2592000}
+      IDENTITY_BCRYPT_COST: ${IDENTITY_BCRYPT_COST:-12}
+      IDENTITY_MAX_LOGIN_ATTEMPTS: ${IDENTITY_MAX_LOGIN_ATTEMPTS:-5}
+      IDENTITY_LOCKOUT_SECONDS: ${IDENTITY_LOCKOUT_SECONDS:-900}
+      IDENTITY_2FA_CHALLENGE_TTL_SECONDS: ${IDENTITY_2FA_CHALLENGE_TTL_SECONDS:-600}
+      IDENTITY_2FA_MAX_ATTEMPTS: ${IDENTITY_2FA_MAX_ATTEMPTS:-5}
+      IDENTITY_TOTP_ISSUER: ${IDENTITY_TOTP_ISSUER:?IDENTITY_TOTP_ISSUER must be set}
+      IDENTITY_TOTP_WINDOW: ${IDENTITY_TOTP_WINDOW:-1}
+      IDENTITY_TOTP_STEP_SECONDS: ${IDENTITY_TOTP_STEP_SECONDS:-30}
+      IDENTITY_TOTP_DIGITS: ${IDENTITY_TOTP_DIGITS:-6}
+      IDENTITY_PASSWORD_RESET_TTL_SECONDS: ${IDENTITY_PASSWORD_RESET_TTL_SECONDS:-1800}
+      IDENTITY_PASSWORD_RESET_COOLDOWN_SECONDS: ${IDENTITY_PASSWORD_RESET_COOLDOWN_SECONDS:-60}
+      IDENTITY_COOKIE_SECURE: ${IDENTITY_COOKIE_SECURE:-true}
+      IDENTITY_OUTBOX_ENCRYPTION_KEY_B64: ${IDENTITY_OUTBOX_ENCRYPTION_KEY_B64:?IDENTITY_OUTBOX_ENCRYPTION_KEY_B64 must be set}
+      IDENTITY_OUTBOX_POLL_INTERVAL_MS: ${IDENTITY_OUTBOX_POLL_INTERVAL_MS:-1000}
+      IDENTITY_OUTBOX_BATCH_SIZE: ${IDENTITY_OUTBOX_BATCH_SIZE:-25}
+      IDENTITY_INVITATION_TTL_SECONDS: ${IDENTITY_INVITATION_TTL_SECONDS:-604800}
+      IDENTITY_INVITATION_RESEND_COOLDOWN_SECONDS: ${IDENTITY_INVITATION_RESEND_COOLDOWN_SECONDS:-60}
+      IDENTITY_2FA_EMAIL_CODE_TTL_SECONDS: ${IDENTITY_2FA_EMAIL_CODE_TTL_SECONDS:-600}
+      IDENTITY_2FA_EMAIL_COOLDOWN_SECONDS: ${IDENTITY_2FA_EMAIL_COOLDOWN_SECONDS:-60}
+      IDENTITY_2FA_EMAIL_MAX_SENDS: ${IDENTITY_2FA_EMAIL_MAX_SENDS:-5}
+      IDENTITY_2FA_EMAIL_RATE_WINDOW_SECONDS: ${IDENTITY_2FA_EMAIL_RATE_WINDOW_SECONDS:-600}
+    expose:
+      - "4101"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4101/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 8192
+    stop_grace_period: 15s
+    logging: *default-logging
+
+  catalog-migrate:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/catalog/Dockerfile
+      target: migration
+    restart: "on-failure:3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CATALOG_DATABASE_URL: postgresql://catalog_service:${CATALOG_DB_PASSWORD:?CATALOG_DB_PASSWORD must be set}@postgres:5432/bealpha_catalog
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    user: node
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging: *default-logging
+
+  catalog:
+    develop: *watch-catalog
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/catalog/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      catalog-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      CATALOG_HOST: 0.0.0.0
+      CATALOG_PORT: 4102
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY_HOPS: 1
+      CATALOG_DATABASE_URL: postgresql://catalog_service:${CATALOG_DB_PASSWORD:?CATALOG_DB_PASSWORD must be set}@postgres:5432/bealpha_catalog
+      CATALOG_DB_POOL_MAX: ${CATALOG_DB_POOL_MAX:-10}
+      CATALOG_BODY_LIMIT_BYTES: ${CATALOG_BODY_LIMIT_BYTES:-32768}
+      CATALOG_OUTBOX_POLL_MS: ${CATALOG_OUTBOX_POLL_MS:-1000}
+      CATALOG_OUTBOX_BATCH_SIZE: ${CATALOG_OUTBOX_BATCH_SIZE:-100}
+      MEDIA_SERVICE_URL: http://media:4103
+      DISTRIBUTION_SERVICE_URL: http://distribution:4104
+      CATALOG_IMPORT_GRANT_ENCRYPTION_KEY_B64: ${CATALOG_IMPORT_GRANT_ENCRYPTION_KEY_B64:?CATALOG_IMPORT_GRANT_ENCRYPTION_KEY_B64 must be set}
+      CATALOG_IMPORT_ROOT: /imports
+      CATALOG_IMPORT_MAX_BYTES: ${CATALOG_IMPORT_MAX_BYTES:-53687091200}
+      CATALOG_IMPORT_MAX_ENTRIES: ${CATALOG_IMPORT_MAX_ENTRIES:-10000}
+      CATALOG_IMPORT_MAX_XML_BYTES: ${CATALOG_IMPORT_MAX_XML_BYTES:-268435456}
+      CATALOG_IMPORT_WORKER_POLL_MS: ${CATALOG_IMPORT_WORKER_POLL_MS:-1000}
+      CATALOG_IMPORT_WORKER_MAX_ATTEMPTS: ${CATALOG_IMPORT_WORKER_MAX_ATTEMPTS:-3}
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+      GATEWAY_INTERNAL_CONTEXT_ISSUER: ${GATEWAY_INTERNAL_CONTEXT_ISSUER:-bealpha-gateway}
+      GATEWAY_INTERNAL_CONTEXT_AUDIENCE: ${GATEWAY_INTERNAL_CONTEXT_AUDIENCE:-bealpha-services}
+    expose:
+      - "4102"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4102/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 8192
+    stop_grace_period: 15s
+    logging: *default-logging
+
+  catalog-import-worker:
+    develop: *watch-catalog
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/catalog/Dockerfile
+    command: ["node", "dist/catalog-import-worker.js"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ps | grep -q '[n]ode dist/catalog-import-worker.js'"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      catalog-migrate:
+        condition: service_completed_successfully
+      media:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      CATALOG_DATABASE_URL: postgresql://catalog_service:${CATALOG_DB_PASSWORD:?CATALOG_DB_PASSWORD must be set}@postgres:5432/bealpha_catalog
+      CATALOG_DB_POOL_MAX: ${CATALOG_DB_POOL_MAX:-5}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+      MEDIA_SERVICE_URL: http://media:4103
+      CATALOG_IMPORT_GRANT_ENCRYPTION_KEY_B64: ${CATALOG_IMPORT_GRANT_ENCRYPTION_KEY_B64:?CATALOG_IMPORT_GRANT_ENCRYPTION_KEY_B64 must be set}
+      CATALOG_IMPORT_ROOT: /imports
+      CATALOG_IMPORT_MAX_BYTES: ${CATALOG_IMPORT_MAX_BYTES:-53687091200}
+      CATALOG_IMPORT_MAX_ENTRIES: ${CATALOG_IMPORT_MAX_ENTRIES:-10000}
+      CATALOG_IMPORT_MAX_XML_BYTES: ${CATALOG_IMPORT_MAX_XML_BYTES:-268435456}
+      CATALOG_IMPORT_WORKER_POLL_MS: ${CATALOG_IMPORT_WORKER_POLL_MS:-1000}
+      CATALOG_IMPORT_WORKER_MAX_ATTEMPTS: ${CATALOG_IMPORT_WORKER_MAX_ATTEMPTS:-3}
+    networks: [backend]
+    volumes:
+      - microservices_catalog_imports:/imports
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 8192
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  catalog-saga-worker:
+    develop: *watch-catalog
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/catalog/Dockerfile
+    command: ["node", "dist/saga-worker.js"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ps | grep -q '[n]ode dist/saga-worker.js'"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      catalog-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      CATALOG_DATABASE_URL: postgresql://catalog_service:${CATALOG_DB_PASSWORD:?CATALOG_DB_PASSWORD must be set}@postgres:5432/bealpha_catalog
+      CATALOG_DB_POOL_MAX: ${CATALOG_DB_POOL_MAX:-5}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+      CATALOG_IMPORT_GRANT_ENCRYPTION_KEY_B64: ${CATALOG_IMPORT_GRANT_ENCRYPTION_KEY_B64:?CATALOG_IMPORT_GRANT_ENCRYPTION_KEY_B64 must be set}
+      MEDIA_SERVICE_URL: http://media:4103
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 96
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  media-migrate:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/media/Dockerfile
+      target: migration
+    restart: "on-failure:3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      MEDIA_DATABASE_URL: postgresql://media_service:${MEDIA_DB_PASSWORD:?MEDIA_DB_PASSWORD must be set}@postgres:5432/bealpha_media
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    user: node
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging: *default-logging
+
+  media:
+    develop: *watch-media
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/media/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      media-migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      MEDIA_HOST: 0.0.0.0
+      MEDIA_PORT: 4103
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY_HOPS: 1
+      MEDIA_DATABASE_URL: postgresql://media_service:${MEDIA_DB_PASSWORD:?MEDIA_DB_PASSWORD must be set}@postgres:5432/bealpha_media
+      MEDIA_DB_POOL_MAX: ${MEDIA_DB_POOL_MAX:-10}
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:?MEDIA_PUBLIC_BASE_URL must be set}
+      MEDIA_STORAGE_ROOT: /data
+      MEDIA_CONTROL_BODY_LIMIT_BYTES: ${MEDIA_CONTROL_BODY_LIMIT_BYTES:-32768}
+      MEDIA_UPLOAD_TTL_SECONDS: ${MEDIA_UPLOAD_TTL_SECONDS:-900}
+      MEDIA_UPLOAD_MAX_BYTES: ${MEDIA_UPLOAD_MAX_BYTES:-53687091200}
+      MEDIA_UPLOAD_CONCURRENCY: ${MEDIA_UPLOAD_CONCURRENCY:-4}
+      MEDIA_STREAM_GRANT_TTL_SECONDS: ${MEDIA_STREAM_GRANT_TTL_SECONDS:-60}
+      MEDIA_PREVIEW_GRANT_MAX_USES: ${MEDIA_PREVIEW_GRANT_MAX_USES:-8}
+      MEDIA_DELIVERY_GRANT_TTL_SECONDS: ${MEDIA_DELIVERY_GRANT_TTL_SECONDS:-3600}
+      MEDIA_DELIVERY_GRANT_MAX_USES: ${MEDIA_DELIVERY_GRANT_MAX_USES:-5}
+      MEDIA_STREAM_CONCURRENCY: ${MEDIA_STREAM_CONCURRENCY:-32}
+      MEDIA_WORKER_POLL_MS: ${MEDIA_WORKER_POLL_MS:-1000}
+      MEDIA_WORKER_MAX_ATTEMPTS: ${MEDIA_WORKER_MAX_ATTEMPTS:-3}
+      MEDIA_ARCHIVE_RETENTION_SECONDS: ${MEDIA_ARCHIVE_RETENTION_SECONDS:-86400}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+      GATEWAY_INTERNAL_CONTEXT_ISSUER: ${GATEWAY_INTERNAL_CONTEXT_ISSUER:-bealpha-gateway}
+      GATEWAY_INTERNAL_CONTEXT_AUDIENCE: ${GATEWAY_INTERNAL_CONTEXT_AUDIENCE:-bealpha-services}
+    expose:
+      - "4103"
+    volumes:
+      - microservices_media_data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4103/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 192
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 8192
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  media-worker:
+    develop: *watch-media
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/media/Dockerfile
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    healthcheck: &worker-healthcheck
+      test: ["CMD-SHELL", "ps | grep -q '[n]ode dist/worker.js'"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      media-migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      MEDIA_DATABASE_URL: postgresql://media_service:${MEDIA_DB_PASSWORD:?MEDIA_DB_PASSWORD must be set}@postgres:5432/bealpha_media
+      MEDIA_DB_POOL_MAX: ${MEDIA_DB_POOL_MAX:-5}
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:?MEDIA_PUBLIC_BASE_URL must be set}
+      MEDIA_STORAGE_ROOT: /data
+      MEDIA_WORKER_POLL_MS: ${MEDIA_WORKER_POLL_MS:-1000}
+      MEDIA_WORKER_MAX_ATTEMPTS: ${MEDIA_WORKER_MAX_ATTEMPTS:-3}
+      MEDIA_ARCHIVE_RETENTION_SECONDS: ${MEDIA_ARCHIVE_RETENTION_SECONDS:-86400}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+    volumes:
+      - microservices_media_data:/data
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 192
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  media-saga-worker:
+    develop: *watch-media
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/media/Dockerfile
+    command: ["node", "dist/saga-worker.js"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ps | grep -q '[n]ode dist/saga-worker.js'"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      media-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MEDIA_DATABASE_URL: postgresql://media_service:${MEDIA_DB_PASSWORD:?MEDIA_DB_PASSWORD must be set}@postgres:5432/bealpha_media
+      MEDIA_DB_POOL_MAX: ${MEDIA_DB_POOL_MAX:-5}
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:?MEDIA_PUBLIC_BASE_URL must be set}
+      MEDIA_STORAGE_ROOT: /data
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 96
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  distribution-migrate:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/distribution/Dockerfile
+      target: migration
+    restart: "on-failure:3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DISTRIBUTION_DATABASE_URL: postgresql://distribution_service:${DISTRIBUTION_DB_PASSWORD:?DISTRIBUTION_DB_PASSWORD must be set}@postgres:5432/bealpha_distribution
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    user: node
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging: *default-logging
+
+  distribution:
+    develop: *watch-distribution
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/distribution/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      distribution-migrate:
+        condition: service_completed_successfully
+      catalog:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${DISTRIBUTION_NODE_ENV:-production}
+      DISTRIBUTION_HOST: 0.0.0.0
+      DISTRIBUTION_PORT: 4104
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY_HOPS: 1
+      DISTRIBUTION_DATABASE_URL: postgresql://distribution_service:${DISTRIBUTION_DB_PASSWORD:?DISTRIBUTION_DB_PASSWORD must be set}@postgres:5432/bealpha_distribution
+      DISTRIBUTION_DB_POOL_MAX: ${DISTRIBUTION_DB_POOL_MAX:-10}
+      DISTRIBUTION_BODY_LIMIT_BYTES: ${DISTRIBUTION_BODY_LIMIT_BYTES:-65536}
+      DISTRIBUTION_ERN_XSD_PATH: ${DISTRIBUTION_ERN_XSD_PATH:-/ddex/ern/release-notification.xsd}
+      DISTRIBUTION_ACK_XSD_PATH: ${DISTRIBUTION_ACK_XSD_PATH:-/ddex/ernc/ern-choreography-sftp.xsd}
+      XML_CATALOG_FILES: /ddex/ern/catalog.xml /ddex/ernc/catalog.xml
+      DISTRIBUTION_DDEX_SENDER_PARTY_ID: ${DISTRIBUTION_DDEX_SENDER_PARTY_ID:?DISTRIBUTION_DDEX_SENDER_PARTY_ID must be set}
+      DISTRIBUTION_DDEX_SENDER_NAME: ${DISTRIBUTION_DDEX_SENDER_NAME:?DISTRIBUTION_DDEX_SENDER_NAME must be set}
+      DISTRIBUTION_DDEX_AVS_VERSION_ID: ${DISTRIBUTION_DDEX_AVS_VERSION_ID:?DISTRIBUTION_DDEX_AVS_VERSION_ID must be set}
+      DISTRIBUTION_GRANT_ENCRYPTION_KEY_B64: ${DISTRIBUTION_GRANT_ENCRYPTION_KEY_B64:?DISTRIBUTION_GRANT_ENCRYPTION_KEY_B64 must be set}
+      DISTRIBUTION_EXPORT_SIGNING_KEY_B64: ${DISTRIBUTION_EXPORT_SIGNING_KEY_B64:?DISTRIBUTION_EXPORT_SIGNING_KEY_B64 must be set}
+      DISTRIBUTION_PUBLIC_BASE_URL: ${DISTRIBUTION_PUBLIC_BASE_URL:?DISTRIBUTION_PUBLIC_BASE_URL must be set}
+      DISTRIBUTION_EXPORT_DOWNLOAD_TTL_SECONDS: ${DISTRIBUTION_EXPORT_DOWNLOAD_TTL_SECONDS:-900}
+      DISTRIBUTION_EXPORT_RETENTION_SECONDS: ${DISTRIBUTION_EXPORT_RETENTION_SECONDS:-86400}
+      DISTRIBUTION_PACKAGE_ROOT: /packages
+      DISTRIBUTION_PACKAGE_MAX_BYTES: ${DISTRIBUTION_PACKAGE_MAX_BYTES:-53687091200}
+      DISTRIBUTION_PACKAGE_MAX_ENTRIES: ${DISTRIBUTION_PACKAGE_MAX_ENTRIES:-10000}
+      DISTRIBUTION_DSP_RECIPIENTS_JSON: ${DISTRIBUTION_DSP_RECIPIENTS_JSON:?DISTRIBUTION_DSP_RECIPIENTS_JSON must be set}
+      DISTRIBUTION_STORE_TARGETS_JSON: ${DISTRIBUTION_STORE_TARGETS_JSON:?DISTRIBUTION_STORE_TARGETS_JSON must be set}
+      DISTRIBUTION_AUTO_PREPARE_DDEX_PACKAGES: ${DISTRIBUTION_AUTO_PREPARE_DDEX_PACKAGES:-true}
+      DISTRIBUTION_SFTP_DELIVERY_ENABLED: ${DISTRIBUTION_SFTP_DELIVERY_ENABLED:-false}
+      DISTRIBUTION_MANUAL_DDEX_RECIPIENT_ID: ${DISTRIBUTION_MANUAL_DDEX_RECIPIENT_ID:?DISTRIBUTION_MANUAL_DDEX_RECIPIENT_ID must be set}
+      DISTRIBUTION_WORKER_POLL_MS: ${DISTRIBUTION_WORKER_POLL_MS:-1000}
+      DISTRIBUTION_WORKER_MAX_ATTEMPTS: ${DISTRIBUTION_WORKER_MAX_ATTEMPTS:-5}
+      DISTRIBUTION_ACK_POLL_MS: ${DISTRIBUTION_ACK_POLL_MS:-60000}
+      CATALOG_SERVICE_URL: http://catalog:4102
+      MEDIA_SERVICE_URL: http://media:4103
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+      GATEWAY_INTERNAL_CONTEXT_ISSUER: ${GATEWAY_INTERNAL_CONTEXT_ISSUER:-bealpha-gateway}
+      GATEWAY_INTERNAL_CONTEXT_AUDIENCE: ${GATEWAY_INTERNAL_CONTEXT_AUDIENCE:-bealpha-services}
+    expose:
+      - "4104"
+    volumes:
+      - ${DISTRIBUTION_ERN_XSD_HOST_DIR:?DISTRIBUTION_ERN_XSD_HOST_DIR must be set}:/ddex/ern:ro
+      - ${DISTRIBUTION_ACK_XSD_HOST_DIR:?DISTRIBUTION_ACK_XSD_HOST_DIR must be set}:/ddex/ernc:ro
+      - microservices_distribution_packages:/packages
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4104/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    cpus: 1.5
+    pids_limit: 192
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 8192
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  distribution-worker:
+    develop: *watch-distribution
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/distribution/Dockerfile
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    healthcheck: *worker-healthcheck
+    depends_on:
+      distribution-migrate:
+        condition: service_completed_successfully
+      media:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${DISTRIBUTION_NODE_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DISTRIBUTION_DATABASE_URL: postgresql://distribution_service:${DISTRIBUTION_DB_PASSWORD:?DISTRIBUTION_DB_PASSWORD must be set}@postgres:5432/bealpha_distribution
+      DISTRIBUTION_DB_POOL_MAX: ${DISTRIBUTION_DB_POOL_MAX:-5}
+      DISTRIBUTION_ERN_XSD_PATH: ${DISTRIBUTION_ERN_XSD_PATH:-/ddex/ern/release-notification.xsd}
+      DISTRIBUTION_ACK_XSD_PATH: ${DISTRIBUTION_ACK_XSD_PATH:-/ddex/ernc/ern-choreography-sftp.xsd}
+      XML_CATALOG_FILES: /ddex/ern/catalog.xml /ddex/ernc/catalog.xml
+      DISTRIBUTION_DDEX_SENDER_PARTY_ID: ${DISTRIBUTION_DDEX_SENDER_PARTY_ID:?DISTRIBUTION_DDEX_SENDER_PARTY_ID must be set}
+      DISTRIBUTION_DDEX_SENDER_NAME: ${DISTRIBUTION_DDEX_SENDER_NAME:?DISTRIBUTION_DDEX_SENDER_NAME must be set}
+      DISTRIBUTION_DDEX_AVS_VERSION_ID: ${DISTRIBUTION_DDEX_AVS_VERSION_ID:?DISTRIBUTION_DDEX_AVS_VERSION_ID must be set}
+      DISTRIBUTION_GRANT_ENCRYPTION_KEY_B64: ${DISTRIBUTION_GRANT_ENCRYPTION_KEY_B64:?DISTRIBUTION_GRANT_ENCRYPTION_KEY_B64 must be set}
+      DISTRIBUTION_EXPORT_SIGNING_KEY_B64: ${DISTRIBUTION_EXPORT_SIGNING_KEY_B64:?DISTRIBUTION_EXPORT_SIGNING_KEY_B64 must be set}
+      DISTRIBUTION_PUBLIC_BASE_URL: ${DISTRIBUTION_PUBLIC_BASE_URL:?DISTRIBUTION_PUBLIC_BASE_URL must be set}
+      DISTRIBUTION_EXPORT_DOWNLOAD_TTL_SECONDS: ${DISTRIBUTION_EXPORT_DOWNLOAD_TTL_SECONDS:-900}
+      DISTRIBUTION_EXPORT_RETENTION_SECONDS: ${DISTRIBUTION_EXPORT_RETENTION_SECONDS:-86400}
+      DISTRIBUTION_DSP_RECIPIENTS_JSON: ${DISTRIBUTION_DSP_RECIPIENTS_JSON:?DISTRIBUTION_DSP_RECIPIENTS_JSON must be set}
+      DISTRIBUTION_STORE_TARGETS_JSON: ${DISTRIBUTION_STORE_TARGETS_JSON:?DISTRIBUTION_STORE_TARGETS_JSON must be set}
+      DISTRIBUTION_AUTO_PREPARE_DDEX_PACKAGES: ${DISTRIBUTION_AUTO_PREPARE_DDEX_PACKAGES:-true}
+      DISTRIBUTION_SFTP_DELIVERY_ENABLED: ${DISTRIBUTION_SFTP_DELIVERY_ENABLED:-false}
+      DISTRIBUTION_MANUAL_DDEX_RECIPIENT_ID: ${DISTRIBUTION_MANUAL_DDEX_RECIPIENT_ID:?DISTRIBUTION_MANUAL_DDEX_RECIPIENT_ID must be set}
+      DISTRIBUTION_WORKER_POLL_MS: ${DISTRIBUTION_WORKER_POLL_MS:-1000}
+      DISTRIBUTION_WORKER_MAX_ATTEMPTS: ${DISTRIBUTION_WORKER_MAX_ATTEMPTS:-5}
+      DISTRIBUTION_ACK_POLL_MS: ${DISTRIBUTION_ACK_POLL_MS:-60000}
+      DISTRIBUTION_PACKAGE_ROOT: /packages
+      DISTRIBUTION_PACKAGE_MAX_BYTES: ${DISTRIBUTION_PACKAGE_MAX_BYTES:-53687091200}
+      DISTRIBUTION_PACKAGE_MAX_ENTRIES: ${DISTRIBUTION_PACKAGE_MAX_ENTRIES:-10000}
+      DISTRIBUTION_SFTP_TARGETS_JSON: ${DISTRIBUTION_SFTP_TARGETS_JSON:?DISTRIBUTION_SFTP_TARGETS_JSON must be set}
+      CATALOG_SERVICE_URL: http://catalog:4102
+      MEDIA_SERVICE_URL: http://media:4103
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+      GATEWAY_INTERNAL_CONTEXT_ISSUER: ${GATEWAY_INTERNAL_CONTEXT_ISSUER:-bealpha-gateway}
+      GATEWAY_INTERNAL_CONTEXT_AUDIENCE: ${GATEWAY_INTERNAL_CONTEXT_AUDIENCE:-bealpha-services}
+    volumes:
+      - ${DISTRIBUTION_ERN_XSD_HOST_DIR:?DISTRIBUTION_ERN_XSD_HOST_DIR must be set}:/ddex/ern:ro
+      - ${DISTRIBUTION_ACK_XSD_HOST_DIR:?DISTRIBUTION_ACK_XSD_HOST_DIR must be set}:/ddex/ernc:ro
+      - ${DISTRIBUTION_SFTP_PRIVATE_KEY_HOST_PATH:?DISTRIBUTION_SFTP_PRIVATE_KEY_HOST_PATH must be set}:/run/secrets/dsp_sftp_key:ro
+      - ${DISTRIBUTION_SFTP_KNOWN_HOSTS_HOST_PATH:?DISTRIBUTION_SFTP_KNOWN_HOSTS_HOST_PATH must be set}:/run/secrets/dsp_known_hosts:ro
+      - microservices_distribution_packages:/packages
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    cpus: 1.5
+    pids_limit: 192
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  distribution-saga-worker:
+    develop: *watch-distribution
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/distribution/Dockerfile
+    command: ["node", "dist/saga-worker.js"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ps | grep -q '[n]ode dist/saga-worker.js'"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      distribution-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${DISTRIBUTION_NODE_ENV:-production}
+      DISTRIBUTION_DATABASE_URL: postgresql://distribution_service:${DISTRIBUTION_DB_PASSWORD:?DISTRIBUTION_DB_PASSWORD must be set}@postgres:5432/bealpha_distribution
+      DISTRIBUTION_DB_POOL_MAX: ${DISTRIBUTION_DB_POOL_MAX:-5}
+      DISTRIBUTION_ERN_XSD_PATH: ${DISTRIBUTION_ERN_XSD_PATH:-/ddex/ern/release-notification.xsd}
+      DISTRIBUTION_ACK_XSD_PATH: ${DISTRIBUTION_ACK_XSD_PATH:-/ddex/ernc/ern-choreography-sftp.xsd}
+      XML_CATALOG_FILES: /ddex/ern/catalog.xml /ddex/ernc/catalog.xml
+      DISTRIBUTION_DDEX_SENDER_PARTY_ID: ${DISTRIBUTION_DDEX_SENDER_PARTY_ID:?DISTRIBUTION_DDEX_SENDER_PARTY_ID must be set}
+      DISTRIBUTION_DDEX_SENDER_NAME: ${DISTRIBUTION_DDEX_SENDER_NAME:?DISTRIBUTION_DDEX_SENDER_NAME must be set}
+      DISTRIBUTION_DDEX_AVS_VERSION_ID: ${DISTRIBUTION_DDEX_AVS_VERSION_ID:?DISTRIBUTION_DDEX_AVS_VERSION_ID must be set}
+      DISTRIBUTION_GRANT_ENCRYPTION_KEY_B64: ${DISTRIBUTION_GRANT_ENCRYPTION_KEY_B64:?DISTRIBUTION_GRANT_ENCRYPTION_KEY_B64 must be set}
+      DISTRIBUTION_EXPORT_SIGNING_KEY_B64: ${DISTRIBUTION_EXPORT_SIGNING_KEY_B64:?DISTRIBUTION_EXPORT_SIGNING_KEY_B64 must be set}
+      DISTRIBUTION_PUBLIC_BASE_URL: ${DISTRIBUTION_PUBLIC_BASE_URL:?DISTRIBUTION_PUBLIC_BASE_URL must be set}
+      DISTRIBUTION_DSP_RECIPIENTS_JSON: ${DISTRIBUTION_DSP_RECIPIENTS_JSON:?DISTRIBUTION_DSP_RECIPIENTS_JSON must be set}
+      DISTRIBUTION_STORE_TARGETS_JSON: ${DISTRIBUTION_STORE_TARGETS_JSON:?DISTRIBUTION_STORE_TARGETS_JSON must be set}
+      DISTRIBUTION_AUTO_PREPARE_DDEX_PACKAGES: ${DISTRIBUTION_AUTO_PREPARE_DDEX_PACKAGES:-true}
+      DISTRIBUTION_SFTP_DELIVERY_ENABLED: ${DISTRIBUTION_SFTP_DELIVERY_ENABLED:-false}
+      DISTRIBUTION_MANUAL_DDEX_RECIPIENT_ID: ${DISTRIBUTION_MANUAL_DDEX_RECIPIENT_ID:?DISTRIBUTION_MANUAL_DDEX_RECIPIENT_ID must be set}
+      CATALOG_SERVICE_URL: http://catalog:4102
+      MEDIA_SERVICE_URL: http://media:4103
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+    volumes:
+      - ${DISTRIBUTION_ERN_XSD_HOST_DIR:?DISTRIBUTION_ERN_XSD_HOST_DIR must be set}:/ddex/ern:ro
+      - ${DISTRIBUTION_ACK_XSD_HOST_DIR:?DISTRIBUTION_ACK_XSD_HOST_DIR must be set}:/ddex/ernc:ro
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 96
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  finance-migrate:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/finance/Dockerfile
+      target: migration
+    restart: "on-failure:3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FINANCE_DATABASE_URL: postgresql://finance_service:${FINANCE_DB_PASSWORD:?FINANCE_DB_PASSWORD must be set}@postgres:5432/bealpha_finance
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    user: node
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging: *default-logging
+
+  finance:
+    develop: *watch-finance
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/finance/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      finance-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      FINANCE_HOST: 0.0.0.0
+      FINANCE_PORT: 4105
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY_HOPS: 1
+      FINANCE_DATABASE_URL: postgresql://finance_service:${FINANCE_DB_PASSWORD:?FINANCE_DB_PASSWORD must be set}@postgres:5432/bealpha_finance
+      FINANCE_DB_POOL_MAX: ${FINANCE_DB_POOL_MAX:-10}
+      FINANCE_BODY_LIMIT_BYTES: ${FINANCE_BODY_LIMIT_BYTES:-65536}
+      FINANCE_PUBLIC_BASE_URL: ${FINANCE_PUBLIC_BASE_URL:?FINANCE_PUBLIC_BASE_URL must be set}
+      FINANCE_STORAGE_ROOT: /data
+      FINANCE_UPLOAD_TTL_SECONDS: ${FINANCE_UPLOAD_TTL_SECONDS:-900}
+      FINANCE_UPLOAD_MAX_BYTES: ${FINANCE_UPLOAD_MAX_BYTES:-53687091200}
+      FINANCE_UPLOAD_CONCURRENCY: ${FINANCE_UPLOAD_CONCURRENCY:-2}
+      FINANCE_WORKER_POLL_MS: ${FINANCE_WORKER_POLL_MS:-1000}
+      FINANCE_WORKER_MAX_ATTEMPTS: ${FINANCE_WORKER_MAX_ATTEMPTS:-3}
+      FINANCE_WORKER_BATCH_SIZE: ${FINANCE_WORKER_BATCH_SIZE:-500}
+      FINANCE_OUTBOX_POLL_MS: ${FINANCE_OUTBOX_POLL_MS:-1000}
+      FINANCE_OUTBOX_BATCH_SIZE: ${FINANCE_OUTBOX_BATCH_SIZE:-100}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+      GATEWAY_INTERNAL_CONTEXT_ISSUER: ${GATEWAY_INTERNAL_CONTEXT_ISSUER:-bealpha-gateway}
+      GATEWAY_INTERNAL_CONTEXT_AUDIENCE: ${GATEWAY_INTERNAL_CONTEXT_AUDIENCE:-bealpha-services}
+    expose: ["4105"]
+    volumes:
+      - microservices_finance_data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4105/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    cpus: 1.5
+    pids_limit: 192
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  finance-worker:
+    develop: *watch-finance
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/finance/Dockerfile
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    healthcheck: *worker-healthcheck
+    depends_on:
+      finance-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      FINANCE_DATABASE_URL: postgresql://finance_service:${FINANCE_DB_PASSWORD:?FINANCE_DB_PASSWORD must be set}@postgres:5432/bealpha_finance
+      FINANCE_DB_POOL_MAX: ${FINANCE_DB_POOL_MAX:-5}
+      FINANCE_PUBLIC_BASE_URL: ${FINANCE_PUBLIC_BASE_URL:?FINANCE_PUBLIC_BASE_URL must be set}
+      FINANCE_STORAGE_ROOT: /data
+      FINANCE_UPLOAD_MAX_BYTES: ${FINANCE_UPLOAD_MAX_BYTES:-53687091200}
+      FINANCE_UPLOAD_CONCURRENCY: ${FINANCE_UPLOAD_CONCURRENCY:-2}
+      FINANCE_WORKER_POLL_MS: ${FINANCE_WORKER_POLL_MS:-1000}
+      FINANCE_WORKER_MAX_ATTEMPTS: ${FINANCE_WORKER_MAX_ATTEMPTS:-3}
+      FINANCE_WORKER_BATCH_SIZE: ${FINANCE_WORKER_BATCH_SIZE:-500}
+      FINANCE_OUTBOX_POLL_MS: ${FINANCE_OUTBOX_POLL_MS:-1000}
+      FINANCE_OUTBOX_BATCH_SIZE: ${FINANCE_OUTBOX_BATCH_SIZE:-100}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+    volumes:
+      - microservices_finance_data:/data
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 192
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  notifications-migrate:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/notifications/Dockerfile
+      target: migration
+    restart: "on-failure:3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NOTIFICATION_DATABASE_URL: postgresql://notification_service:${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD must be set}@postgres:5432/bealpha_notifications
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    user: node
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging: *default-logging
+
+  notifications:
+    develop: *watch-notifications
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/notifications/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      notifications-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NOTIFICATION_HOST: 0.0.0.0
+      NOTIFICATION_PORT: 4106
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY_HOPS: 1
+      NOTIFICATION_DATABASE_URL: postgresql://notification_service:${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD must be set}@postgres:5432/bealpha_notifications
+      NOTIFICATION_DB_POOL_MAX: ${NOTIFICATION_DB_POOL_MAX:-10}
+      NOTIFICATION_BODY_LIMIT_BYTES: ${NOTIFICATION_BODY_LIMIT_BYTES:-32768}
+      NOTIFICATION_ENCRYPTION_KEY_B64: ${NOTIFICATION_ENCRYPTION_KEY_B64:?NOTIFICATION_ENCRYPTION_KEY_B64 must be set}
+      NOTIFICATION_WORKER_POLL_MS: ${NOTIFICATION_WORKER_POLL_MS:-1000}
+      NOTIFICATION_WORKER_MAX_ATTEMPTS: ${NOTIFICATION_WORKER_MAX_ATTEMPTS:-5}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      APP_URL: ${APP_URL:?APP_URL must be set}
+      SMTP_MESSAGE_ID_DOMAIN: ${SMTP_MESSAGE_ID_DOMAIN:?SMTP_MESSAGE_ID_DOMAIN must be set}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM must be set}
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+      GATEWAY_INTERNAL_CONTEXT_ISSUER: ${GATEWAY_INTERNAL_CONTEXT_ISSUER:-bealpha-gateway}
+      GATEWAY_INTERNAL_CONTEXT_AUDIENCE: ${GATEWAY_INTERNAL_CONTEXT_AUDIENCE:-bealpha-services}
+    expose: ["4106"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4106/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.75
+    pids_limit: 128
+    stop_grace_period: 15s
+    logging: *default-logging
+
+  notifications-worker:
+    develop: *watch-notifications
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/notifications/Dockerfile
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    healthcheck: *worker-healthcheck
+    depends_on:
+      notifications-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NOTIFICATION_REQUIRE_SMTP: "true"
+      NOTIFICATION_DATABASE_URL: postgresql://notification_service:${NOTIFICATION_DB_PASSWORD:?NOTIFICATION_DB_PASSWORD must be set}@postgres:5432/bealpha_notifications
+      NOTIFICATION_DB_POOL_MAX: ${NOTIFICATION_DB_POOL_MAX:-5}
+      NOTIFICATION_ENCRYPTION_KEY_B64: ${NOTIFICATION_ENCRYPTION_KEY_B64:?NOTIFICATION_ENCRYPTION_KEY_B64 must be set}
+      NOTIFICATION_WORKER_POLL_MS: ${NOTIFICATION_WORKER_POLL_MS:-1000}
+      NOTIFICATION_WORKER_MAX_ATTEMPTS: ${NOTIFICATION_WORKER_MAX_ATTEMPTS:-5}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      APP_URL: ${APP_URL:?APP_URL must be set}
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST must be set}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-true}
+      SMTP_MESSAGE_ID_DOMAIN: ${SMTP_MESSAGE_ID_DOMAIN:?SMTP_MESSAGE_ID_DOMAIN must be set}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM must be set}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-BeAlpha}
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+    networks: [backend, edge]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  nginx:
+    image: bealpha-nginx:local
+    build:
+      context: .
+      dockerfile: gateway/nginx.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      dashboard:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+      media:
+        condition: service_healthy
+      finance:
+        condition: service_healthy
+    environment:
+      EDGE_SERVER_NAMES: ${EDGE_SERVER_NAMES:-localhost 127.0.0.1}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        envsubst '$${EDGE_SERVER_NAMES}' < /etc/nginx/nginx.conf.template > /tmp/nginx.conf
+        exec nginx -c /tmp/nginx.conf -g 'daemon off;'
+    user: "101:101"
+    ports:
+      - ${EDGE_HTTP_PORT:-80}:8080
+      - ${EDGE_HTTPS_PORT:-443}:8443
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf.template:ro
+      - ./certs:/etc/nginx/certs:ro
+    networks:
+      - edge
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /var/cache/nginx:rw,noexec,nosuid,size=32m,uid=101,gid=101,mode=0750
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "--spider",
+          "--no-check-certificate",
+          "https://127.0.0.1:8443/health/live"
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 8192
+    stop_grace_period: 10s
+    logging: *default-logging
+
+  analytics-migrate:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/analytics/Dockerfile
+      target: migration
+    restart: "on-failure:3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ANALYTICS_DATABASE_URL: postgresql://analytics_service:${ANALYTICS_DB_PASSWORD:?ANALYTICS_DB_PASSWORD must be set}@postgres:5432/bealpha_analytics
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    user: node
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging: *default-logging
+
+  analytics:
+    develop: *watch-analytics
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/analytics/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      analytics-migrate:
+        condition: service_completed_successfully
+      catalog:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      ANALYTICS_HOST: 0.0.0.0
+      ANALYTICS_PORT: 4107
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY_HOPS: 1
+      ANALYTICS_DATABASE_URL: postgresql://analytics_service:${ANALYTICS_DB_PASSWORD:?ANALYTICS_DB_PASSWORD must be set}@postgres:5432/bealpha_analytics
+      ANALYTICS_DB_POOL_MAX: ${ANALYTICS_DB_POOL_MAX:-10}
+      ANALYTICS_BODY_LIMIT_BYTES: ${ANALYTICS_BODY_LIMIT_BYTES:-65536}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      CATALOG_SERVICE_URL: http://catalog:4102
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+      GATEWAY_INTERNAL_CONTEXT_ISSUER: ${GATEWAY_INTERNAL_CONTEXT_ISSUER:-bealpha-gateway}
+      GATEWAY_INTERNAL_CONTEXT_AUDIENCE: ${GATEWAY_INTERNAL_CONTEXT_AUDIENCE:-bealpha-services}
+    expose: ["4107"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4107/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    stop_grace_period: 15s
+    logging: *default-logging
+
+  analytics-worker:
+    develop: *watch-analytics
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/analytics/Dockerfile
+    command: ["node", "dist/analytics-worker.js"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ps | grep -q '[n]ode dist/analytics-worker.js'"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      analytics-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      ANALYTICS_DATABASE_URL: postgresql://analytics_service:${ANALYTICS_DB_PASSWORD:?ANALYTICS_DB_PASSWORD must be set}@postgres:5432/bealpha_analytics
+      ANALYTICS_DB_POOL_MAX: ${ANALYTICS_DB_POOL_MAX:-5}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      CATALOG_SERVICE_URL: http://catalog:4102
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 96
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  audit-migrate:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/audit/Dockerfile
+      target: migration
+    restart: "on-failure:3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AUDIT_DATABASE_URL: postgresql://audit_service:${AUDIT_DB_PASSWORD:?AUDIT_DB_PASSWORD must be set}@postgres:5432/bealpha_audit
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    user: node
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging: *default-logging
+
+  audit:
+    develop: *watch-audit
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/audit/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      audit-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      AUDIT_HOST: 0.0.0.0
+      AUDIT_PORT: 4108
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY_HOPS: 1
+      AUDIT_DATABASE_URL: postgresql://audit_service:${AUDIT_DB_PASSWORD:?AUDIT_DB_PASSWORD must be set}@postgres:5432/bealpha_audit
+      AUDIT_DB_POOL_MAX: ${AUDIT_DB_POOL_MAX:-10}
+      AUDIT_BODY_LIMIT_BYTES: ${AUDIT_BODY_LIMIT_BYTES:-32768}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+      GATEWAY_INTERNAL_CONTEXT_ISSUER: ${GATEWAY_INTERNAL_CONTEXT_ISSUER:-bealpha-gateway}
+      GATEWAY_INTERNAL_CONTEXT_AUDIENCE: ${GATEWAY_INTERNAL_CONTEXT_AUDIENCE:-bealpha-services}
+    expose: ["4108"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4108/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.75
+    pids_limit: 128
+    stop_grace_period: 15s
+    logging: *default-logging
+
+  audit-worker:
+    develop: *watch-audit
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: services/audit/Dockerfile
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    healthcheck: *worker-healthcheck
+    depends_on:
+      audit-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      AUDIT_DATABASE_URL: postgresql://audit_service:${AUDIT_DB_PASSWORD:?AUDIT_DB_PASSWORD must be set}@postgres:5432/bealpha_audit
+      AUDIT_DB_POOL_MAX: ${AUDIT_DB_POOL_MAX:-5}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64: ${GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64:?GATEWAY_INTERNAL_CONTEXT_PUBLIC_KEY_B64 must be set}
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.75
+    pids_limit: 128
+    stop_grace_period: 20s
+    logging: *default-logging
+
+volumes:
+  microservices_postgres_data:
+  microservices_redis_data:
+  microservices_media_data:
+  microservices_catalog_imports:
+  microservices_distribution_packages:
+  microservices_finance_data:
+
+networks:
+  edge:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true
+  migration:
+    driver: bridge

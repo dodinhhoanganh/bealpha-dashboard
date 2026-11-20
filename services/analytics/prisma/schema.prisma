@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/analytics-prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model StreamingMetric {
+  id              String   @id @default(uuid()) @db.Uuid
+  trackId         String   @map("track_id") @db.Uuid
+  trackTitle      String   @map("track_title") @db.VarChar(500)
+  tenantId        String   @map("tenant_id") @db.Uuid
+  entityPath      String   @map("entity_path") @db.VarChar(2048)
+  date            DateTime @db.Date
+  platform        String   @db.VarChar(100)
+  country         String   @default("XX") @db.VarChar(2)
+  plays           Int      @default(0)
+  skips           Int      @default(0)
+  saves           Int      @default(0)
+  shares          Int      @default(0)
+  avgPlayDuration Int?     @map("avg_play_duration")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([trackId, date, platform, country])
+  @@index([entityPath, date])
+  @@index([tenantId, date])
+  @@index([platform, date])
+  @@map("streaming_metrics")
+}
+
+model TrackScope {
+  trackId    String   @id @map("track_id") @db.Uuid
+  trackTitle String   @map("track_title") @db.VarChar(500)
+  tenantId   String   @map("tenant_id") @db.Uuid
+  entityPath String   @map("entity_path") @db.VarChar(2048)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([entityPath])
+  @@map("track_scopes")
+}

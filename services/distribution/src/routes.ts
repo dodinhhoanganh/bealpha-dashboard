@@ -1,0 +1,30 @@
+import { INTERNAL_CONTEXT_HEADER, ddexAcknowledgementRequestSchema, deliveryRequestSchema, vevoSubmissionRequestSchema } from "@bealpha/contracts";
+import type { FastifyInstance } from "fastify";
+import { DistributionService } from "./distribution-service.js";
+import { DistributionError } from "./errors.js";
+import { ExportService } from "./export-service.js";
+import { successEnvelope } from "./response.js";
+import { z } from "zod";
+import { VevoService } from "./vevo-service.js";
+const uuid = z.string().uuid();
+const previewRequest = deliveryRequestSchema.omit({ idempotencyKey: true });
+const exportRequest = z.object({ format: z.enum(["xlsx", "zip"]), releaseId: uuid.optional() }).strict();
+const exportToken = z.string().min(40).max(256).regex(/^\d+\.[A-Za-z0-9_-]+$/);
+const recipientQuery = z.object({ releaseType: z.enum(["AUDIO", "VIDEO"]).optional() }).strict();
+export function registerDistributionRoutes(app: FastifyInstance, service: DistributionService, exportService: ExportService, vevoService: VevoService) {
+  app.get("/api/v1/distribution/recipients", async request => successEnvelope(request.id, service.listRecipients(request.authContext!, recipientQuery.parse(request.query).releaseType)));
+  app.get("/api/v1/distribution/deliveries", async request => successEnvelope(request.id, await service.listDeliveries(request.authContext!)));
+  app.get<{ Params: { deliveryId: string } }>("/api/v1/distribution/deliveries/:deliveryId", async request => successEnvelope(request.id, await service.getDelivery(request.authContext!, uuid.parse(request.params.deliveryId))));
+  app.post("/api/v1/distribution/preview", async request => { const signedContext = request.headers[INTERNAL_CONTEXT_HEADER]; if (typeof signedContext !== "string") throw new DistributionError(401, "UNAUTHENTICATED", "Signed Gateway context required"); return successEnvelope(request.id, await service.previewDelivery(request.authContext!, previewRequest.parse(request.body), signedContext)); });
+  app.post("/api/v1/distribution/deliveries", async (request, reply) => { const signedContext = request.headers[INTERNAL_CONTEXT_HEADER]; if (typeof signedContext !== "string") throw new DistributionError(401, "UNAUTHENTICATED", "Signed Gateway context required"); const result = await service.createDelivery(request.authContext!, deliveryRequestSchema.parse(request.body), signedContext); reply.code(202); return successEnvelope(request.id, result); });
+  app.post<{ Params: { deliveryId: string } }>("/api/v1/distribution/deliveries/:deliveryId/acknowledgements", async (request, reply) => { const result = await service.recordAcknowledgement(request.authContext!, uuid.parse(request.params.deliveryId), ddexAcknowledgementRequestSchema.parse(request.body)); reply.code(201); return successEnvelope(request.id, result); });
+  app.post("/api/v1/distribution/exports", async (request, reply) => { const signedContext = request.headers[INTERNAL_CONTEXT_HEADER]; if (typeof signedContext !== "string") throw new DistributionError(401, "UNAUTHENTICATED", "Signed Gateway context required"); const result = await exportService.createExport(request.authContext!, exportRequest.parse(request.body), signedContext); reply.code(202); return successEnvelope(request.id, result); });
+  app.get("/api/v1/distribution/exports", async request => successEnvelope(request.id, await exportService.listExports(request.authContext!)));
+  app.get<{ Params: { exportId: string } }>("/api/v1/distribution/exports/:exportId", async request => successEnvelope(request.id, await exportService.getExport(request.authContext!, uuid.parse(request.params.exportId))));
+  app.post<{ Params: { exportId: string } }>("/api/v1/distribution/exports/:exportId/retry", async (request, reply) => { const result = await exportService.retryApprovedAudioPackage(request.authContext!, uuid.parse(request.params.exportId)); reply.code(202); return successEnvelope(request.id, result); });
+  app.get<{ Params: { exportId: string }; Querystring: { token?: string } }>("/distribution-export/:exportId", async (request, reply) => { const opened = await exportService.openExport(uuid.parse(request.params.exportId), exportToken.parse(request.query.token)); reply.header("content-length", opened.sizeBytes); reply.header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(opened.fileName)}`); reply.header("cache-control", "private, no-store"); reply.type(opened.contentType); return reply.send(opened.stream); });
+  app.get("/api/v1/distribution/vevo/submissions", async request => successEnvelope(request.id, await vevoService.list(request.authContext!)));
+  app.get<{ Params: { submissionId: string } }>("/api/v1/distribution/vevo/submissions/:submissionId", async request => successEnvelope(request.id, await vevoService.get(request.authContext!, uuid.parse(request.params.submissionId))));
+  app.post("/api/v1/distribution/vevo/submissions", async (request, reply) => { const signedContext = request.headers[INTERNAL_CONTEXT_HEADER]; if (typeof signedContext !== "string") throw new DistributionError(401, "UNAUTHENTICATED", "Signed Gateway context required"); const result = await vevoService.create(request.authContext!, vevoSubmissionRequestSchema.parse(request.body), signedContext); reply.code(202); return successEnvelope(request.id, result); });
+  app.get<{ Params: { submissionId: string }; Querystring: { token?: string } }>("/vevo-package/:submissionId", async (request, reply) => { const opened = await vevoService.openPackage(uuid.parse(request.params.submissionId), exportToken.parse(request.query.token)); reply.header("content-length", opened.sizeBytes); reply.header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(opened.fileName)}`); reply.header("cache-control", "private, no-store"); reply.type("application/zip"); return reply.send(opened.stream); });
+}

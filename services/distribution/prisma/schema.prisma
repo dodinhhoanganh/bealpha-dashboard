@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/distribution-prisma2"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DeliveryStatus {
+  INITIALIZING
+  PENDING
+  PROCESSING
+  SENT
+  CONFIRMED
+  FAILED
+  CANCELLED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
+enum ExportFormat {
+  XLSX
+  ZIP
+}
+
+enum VevoSubmissionStatus {
+  PENDING
+  PROCESSING
+  SENT_AWAITING_ACK
+  CONFIRMED
+  FAILED
+  READY_FOR_MANUAL_DELIVERY
+}
+
+enum VevoAssetRole {
+  VIDEO
+  IMAGE
+  CAPTION
+}
+
+model DeliverySnapshot {
+  id          String     @id @default(uuid()) @db.Uuid
+  releaseId   String     @map("release_id") @db.Uuid
+  tenantId    String     @map("tenant_id") @db.Uuid
+  entityPath  String     @map("entity_path") @db.VarChar(2048)
+  version     Int
+  payload     Json
+  ernXml      String     @map("ern_xml") @db.Text
+  sha256      String     @db.Char(64)
+  createdById String     @map("created_by_id") @db.Uuid
+  requestId   String     @map("request_id") @db.Uuid
+  createdAt   DateTime   @default(now()) @map("created_at")
+  deliveries  Delivery[]
+
+  @@unique([releaseId, version])
+  @@unique([releaseId, sha256])
+  @@index([tenantId, createdAt])
+  @@index([entityPath])
+  @@map("delivery_snapshots")
+}
+
+model Delivery {
+  id             String           @id @default(uuid()) @db.Uuid
+  snapshotId     String?          @map("snapshot_id") @db.Uuid
+  releaseId      String           @map("release_id") @db.Uuid
+  tenantId       String           @map("tenant_id") @db.Uuid
+  entityPath     String           @map("entity_path") @db.VarChar(2048)
+  dsp            String           @db.VarChar(64)
+  ernVersion     String           @map("ern_version") @db.VarChar(10)
+  messageType    String           @map("message_type") @db.VarChar(64)
+  messageId      String           @unique @map("message_id") @db.VarChar(200)
+  messageThreadId String          @map("message_thread_id") @db.VarChar(200)
+  releaseProfileVersionId String  @default("SimpleAudioSingle") @map("release_profile_version_id") @db.VarChar(64)
+  idempotencyKey String           @map("idempotency_key") @db.VarChar(128)
+  status         DeliveryStatus   @default(PENDING)
+  attempts       Int              @default(0)
+  sentAt         DateTime?        @map("sent_at")
+  confirmedAt    DateTime?        @map("confirmed_at")
+  remoteFolder   String?          @map("remote_folder") @db.VarChar(500)
+  lastError      String?          @map("last_error") @db.VarChar(1000)
+  ackPollAfter   DateTime?        @map("ack_poll_after")
+  ackPollLockedAt DateTime?       @map("ack_poll_locked_at")
+  ackPollAttempts Int             @default(0) @map("ack_poll_attempts")
+  ackPollLastError String?        @map("ack_poll_last_error") @db.VarChar(1000)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  snapshot       DeliverySnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  assetGrants    DeliveryAssetGrant[]
+  job            DeliveryJob?
+  acknowledgements DeliveryAcknowledgement[]
+
+  @@index([tenantId, createdAt])
+  @@unique([tenantId, idempotencyKey])
+  @@index([entityPath])
+  @@index([releaseId, dsp])
+  @@index([status, createdAt])
+  @@index([status, ackPollAfter])
+  @@map("deliveries")
+}
+
+model DeliveryAcknowledgement {
+  id                       String   @id @default(uuid()) @db.Uuid
+  deliveryId               String   @map("delivery_id") @db.Uuid
+  acknowledgementMessageId String   @map("acknowledgement_message_id") @db.VarChar(500)
+  referencedMessageId      String   @map("referenced_message_id") @db.VarChar(200)
+  senderPartyId            String   @map("sender_party_id") @db.VarChar(128)
+  supplyChainStatus        String   @map("supply_chain_status") @db.VarChar(100)
+  fileStatuses             Json     @map("file_statuses")
+  information              String?  @db.VarChar(1000)
+  fileName                 String   @map("file_name") @db.VarChar(500)
+  rawSha256                String   @unique @map("raw_sha256") @db.Char(64)
+  messageCreatedAt         DateTime @map("message_created_at")
+  receivedAt               DateTime @default(now()) @map("received_at")
+  delivery                 Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId, receivedAt])
+  @@unique([senderPartyId, acknowledgementMessageId])
+  @@map("delivery_acknowledgements")
+}
+
+model DeliveryAssetGrant {
+  id              String   @id @default(uuid()) @db.Uuid
+  deliveryId      String   @map("delivery_id") @db.Uuid
+  assetId         String   @map("asset_id") @db.Uuid
+  tokenCiphertext String   @map("token_ciphertext") @db.Text
+  fileName        String   @map("file_name") @db.VarChar(500)
+  contentType     String   @map("content_type") @db.VarChar(255)
+  sizeBytes       BigInt   @map("size_bytes")
+  expiresAt       DateTime @map("expires_at")
+  consumedAt      DateTime? @map("consumed_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  delivery        Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@unique([deliveryId, assetId])
+  @@index([expiresAt])
+  @@map("delivery_asset_grants")
+}
+
+model DeliveryJob {
+  id          String    @id @default(uuid()) @db.Uuid
+  deliveryId  String    @unique @map("delivery_id") @db.Uuid
+  status      JobStatus @default(PENDING)
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now()) @map("available_at")
+  lockedAt    DateTime? @map("locked_at")
+  lastError   String?   @map("last_error") @db.VarChar(1000)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  delivery    Delivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@map("delivery_jobs")
+}
+
+model ExportJob {
+  id          String       @id @default(uuid()) @db.Uuid
+  tenantId    String       @map("tenant_id") @db.Uuid
+  entityPath  String       @map("entity_path") @db.VarChar(2048)
+  actorId     String       @map("actor_id") @db.Uuid
+  requestId   String       @map("request_id") @db.Uuid
+  format      ExportFormat
+  status      JobStatus    @default(PENDING)
+  payload     Json
+  attempts    Int          @default(0)
+  availableAt DateTime     @default(now()) @map("available_at")
+  lockedAt    DateTime?    @map("locked_at")
+  outputPath  String?      @map("output_path") @db.VarChar(1000)
+  fileName    String?      @map("file_name") @db.VarChar(500)
+  contentType String?      @map("content_type") @db.VarChar(255)
+  sizeBytes   BigInt?      @map("size_bytes")
+  sha256      String?      @db.Char(64)
+  lastError   String?      @map("last_error") @db.VarChar(1000)
+  expiresAt   DateTime     @map("expires_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@index([status, availableAt])
+  @@index([entityPath, createdAt])
+  @@index([expiresAt])
+  @@map("export_jobs")
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  eventId     String    @unique @map("event_id") @db.Uuid
+  version     Int       @default(1)
+  type        String    @db.VarChar(100)
+  occurredAt  DateTime  @default(now()) @map("occurred_at")
+  requestId   String    @map("request_id") @db.Uuid
+  actorId     String?   @map("actor_id") @db.Uuid
+  tenantId    String?   @map("tenant_id") @db.Uuid
+  entityPath  String?   @map("entity_path") @db.VarChar(2048)
+  payload     Json
+  publishedAt DateTime? @map("published_at")
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error") @db.VarChar(500)
+
+  @@index([publishedAt, occurredAt])
+  @@map("outbox_events")
+}
+
+model VevoSubmission {
+  id                 String               @id @default(uuid()) @db.Uuid
+  releaseId          String               @map("release_id") @db.Uuid
+  tenantId           String               @map("tenant_id") @db.Uuid
+  entityPath         String               @map("entity_path") @db.VarChar(2048)
+  actorId            String               @map("actor_id") @db.Uuid
+  requestId          String               @map("request_id") @db.Uuid
+  idempotencyKey     String               @map("idempotency_key") @db.VarChar(128)
+  isrc               String               @db.Char(12)
+  metadata           Json
+  manifestXml        String               @map("manifest_xml") @db.Text
+  manifestFileName   String               @map("manifest_file_name") @db.VarChar(500)
+  manifestSha256     String               @map("manifest_sha256") @db.Char(64)
+  status             VevoSubmissionStatus @default(PENDING)
+  attempts           Int                  @default(0)
+  availableAt        DateTime             @default(now()) @map("available_at")
+  lockedAt           DateTime?            @map("locked_at")
+  submittedAt        DateTime?            @map("submitted_at")
+  confirmedAt        DateTime?            @map("confirmed_at")
+  submissionPrefix   String?              @map("submission_prefix") @db.VarChar(500)
+  manifestKey        String?              @map("manifest_key") @db.VarChar(1024)
+  assetKeys           Json?                @map("asset_keys")
+  receiptKey          String?              @map("receipt_key") @db.VarChar(1024)
+  receiptSha256       String?              @unique @map("receipt_sha256") @db.Char(64)
+  lastError           String?              @map("last_error") @db.VarChar(1000)
+  packagePath         String?              @map("package_path") @db.VarChar(1000)
+  packageFileName     String?              @map("package_file_name") @db.VarChar(500)
+  packageSizeBytes    BigInt?               @map("package_size_bytes")
+  packageSha256       String?               @map("package_sha256") @db.Char(64)
+  packageExpiresAt    DateTime?             @map("package_expires_at")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  assets              VevoSubmissionAsset[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([entityPath, createdAt])
+  @@index([status, availableAt])
+  @@index([releaseId, createdAt])
+  @@map("vevo_submissions")
+}
+
+model VevoSubmissionAsset {
+  id              String         @id @default(uuid()) @db.Uuid
+  submissionId    String         @map("submission_id") @db.Uuid
+  assetId         String         @map("asset_id") @db.Uuid
+  role            VevoAssetRole
+  tokenCiphertext String         @map("token_ciphertext") @db.Text
+  fileName        String         @map("file_name") @db.VarChar(500)
+  contentType     String         @map("content_type") @db.VarChar(255)
+  sizeBytes       BigInt         @map("size_bytes")
+  sha256          String         @db.Char(64)
+  expiresAt       DateTime       @map("expires_at")
+  consumedAt      DateTime?      @map("consumed_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  submission      VevoSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, assetId])
+  @@index([expiresAt])
+  @@map("vevo_submission_assets")
+}

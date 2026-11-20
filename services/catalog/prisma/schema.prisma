@@ -1,0 +1,400 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma-v2"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum EntityType {
+  SUPER_ADMIN
+  SYSTEM_ADMIN
+  ORGANIZATION
+  SUB_ACCOUNT
+}
+
+enum ReleaseType {
+  AUDIO
+  VIDEO
+}
+
+enum ReleaseFormat {
+  SINGLE
+  EP
+  ALBUM
+  COMPILATION
+}
+
+enum ReleaseStatus {
+  DRAFT
+  PENDING_ORG_APPROVAL
+  ORG_REJECTED
+  PENDING_SYS_APPROVAL
+  SYS_REJECTED
+  PENDING_SUPER_APPROVAL
+  SUPER_REJECTED
+  APPROVED
+  SCHEDULED
+  LOCKED_FOR_DELIVERY
+  DELIVERED
+  RELEASED
+  TAKEDOWN
+}
+
+enum CatalogImportFormat {
+  XML
+  ZIP
+  CSV
+  XLSX
+}
+
+enum CatalogImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETE
+  FAILED
+}
+
+enum CatalogImportJobStatus {
+  PENDING
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
+enum TenantDomainStatus {
+  PENDING
+  VERIFIED
+}
+
+model BusinessEntity {
+  id                String           @id @default(uuid()) @db.Uuid
+  entityType        EntityType       @map("entity_type")
+  businessTier      String?          @map("business_tier") @db.VarChar(16)
+  parentId          String?          @map("parent_id") @db.Uuid
+  officialName      String           @map("official_name") @db.VarChar(255)
+  description       String?          @db.Text
+  metadata          Json?
+  path              String           @unique @db.VarChar(2048)
+  isActive          Boolean          @default(true) @map("is_active")
+  version           Int              @default(1)
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  parent            BusinessEntity?  @relation("EntityHierarchy", fields: [parentId], references: [id])
+  children          BusinessEntity[] @relation("EntityHierarchy")
+  labels            Label[]
+  artists           Artist[]
+  releases          Release[]        @relation("ReleaseTenant")
+  ownedReleases     Release[]        @relation("ReleaseOwner")
+  compositions      Composition[]
+  ownedCompositions Composition[]    @relation("CompositionOwner")
+  labelAccessGrants SubAccountLabelAccess[] @relation("SubAccountLabelAccess")
+  brandProfile      TenantBrandProfile?
+  domains           TenantDomain[]
+
+  @@unique([parentId, entityType, officialName])
+  @@index([path])
+  @@map("business_entities")
+}
+
+model TenantBrandProfile {
+  tenantId        String         @id @map("tenant_id") @db.Uuid
+  displayName     String         @map("display_name") @db.VarChar(80)
+  logoAssetId     String?        @map("logo_asset_id") @db.Uuid
+  accentColor     String         @default("#111111") @map("accent_color") @db.Char(7)
+  accentTextColor String         @default("#FFFFFF") @map("accent_text_color") @db.Char(7)
+  supportEmail    String?        @map("support_email") @db.VarChar(254)
+  supportUrl      String?        @map("support_url") @db.VarChar(2048)
+  defaultLocale   String         @default("en") @map("default_locale") @db.VarChar(10)
+  version         Int            @default(1)
+  updatedById     String         @map("updated_by_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  tenant          BusinessEntity @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_brand_profiles")
+}
+
+model TenantDomain {
+  id                    String             @id @default(uuid()) @db.Uuid
+  tenantId              String             @map("tenant_id") @db.Uuid
+  hostname              String             @unique @db.VarChar(253)
+  status                TenantDomainStatus @default(PENDING)
+  verificationTokenHash String             @map("verification_token_hash") @db.Char(64)
+  version               Int                @default(1)
+  verifiedAt            DateTime?          @map("verified_at")
+  lastCheckedAt         DateTime?          @map("last_checked_at")
+  updatedById           String             @map("updated_by_id") @db.Uuid
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+  tenant                BusinessEntity     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("tenant_domains")
+}
+
+model Label {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @map("tenant_id") @db.Uuid
+  name          String         @db.VarChar(255)
+  description   String?        @db.Text
+  dpid          String?        @db.VarChar(128)
+  ddexPartyName String?        @map("ddex_party_name") @db.VarChar(255)
+  logoUrl       String?        @map("logo_url") @db.VarChar(2048)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  tenant        BusinessEntity @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  artists       Artist[]
+  releases      Release[]
+  subAccountAccess SubAccountLabelAccess[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("labels")
+}
+
+/// Explicit label allow-list for a SUB_ACCOUNT. No rows means no catalog access.
+/// Labels and artists remain tenant-owned catalog data; this table is authorization only.
+model SubAccountLabelAccess {
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String         @map("tenant_id") @db.Uuid
+  subAccountId String         @map("sub_account_id") @db.Uuid
+  labelId      String         @map("label_id") @db.Uuid
+  createdAt    DateTime       @default(now()) @map("created_at")
+  subAccount   BusinessEntity @relation("SubAccountLabelAccess", fields: [subAccountId], references: [id], onDelete: Cascade)
+  label        Label          @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([subAccountId, labelId])
+  @@index([tenantId, subAccountId])
+  @@index([tenantId, labelId])
+  @@map("sub_account_label_access")
+}
+
+model Artist {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @map("tenant_id") @db.Uuid
+  labelId       String?        @map("label_id") @db.Uuid
+  name          String         @db.VarChar(255)
+  bio           String?        @db.Text
+  spotifyId     String?        @map("spotify_id") @db.VarChar(128)
+  appleMusicId  String?        @map("apple_music_id") @db.VarChar(128)
+  vevoChannel   String?        @map("vevo_channel") @db.VarChar(20)
+  vevoBio       String?        @map("vevo_bio") @db.VarChar(1000)
+  vevoBannerUrl String?        @map("vevo_banner_url") @db.VarChar(2048)
+  isni          String?        @unique @db.VarChar(32)
+  ipi           String?        @unique @db.VarChar(32)
+  dpid          String?        @db.VarChar(128)
+  imageUrl      String?        @map("image_url") @db.VarChar(2048)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  tenant        BusinessEntity @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  label         Label?         @relation(fields: [labelId], references: [id], onDelete: SetNull)
+  releases      Release[]
+  tracks        Track[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([labelId])
+  @@map("artists")
+}
+
+model Release {
+  id             String         @id @default(uuid()) @db.Uuid
+  title          String         @db.VarChar(500)
+  ean            String?        @unique @db.VarChar(14)
+  type           ReleaseType    @default(AUDIO)
+  format         ReleaseFormat  @default(SINGLE)
+  genre          String?        @db.VarChar(100)
+  releaseDate    DateTime       @map("release_date")
+  displayArtist  String?        @map("display_artist") @db.VarChar(500)
+  coverUrl       String?        @map("cover_url") @db.VarChar(2048)
+  upcLockedAt    DateTime?      @map("upc_locked_at")
+  artistId       String?        @map("artist_id") @db.Uuid
+  labelId        String?        @map("label_id") @db.Uuid
+  status         ReleaseStatus  @default(DRAFT)
+  tenantId       String         @map("tenant_id") @db.Uuid
+  ownerId        String         @map("owner_id") @db.Uuid
+  totalSizeBytes BigInt         @default(0) @map("total_size_bytes")
+  metadata       Json?
+  lastRejectionReason String?       @map("last_rejection_reason") @db.VarChar(1000)
+  lastRejectedByTier  EntityType?   @map("last_rejected_by_tier")
+  lastRejectedAt      DateTime?     @map("last_rejected_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  artist         Artist?        @relation(fields: [artistId], references: [id], onDelete: SetNull)
+  label          Label?         @relation(fields: [labelId], references: [id], onDelete: SetNull)
+  tenant         BusinessEntity @relation("ReleaseTenant", fields: [tenantId], references: [id])
+  owner          BusinessEntity @relation("ReleaseOwner", fields: [ownerId], references: [id])
+  tracks         Track[]
+
+  @@index([tenantId])
+  @@index([ownerId])
+  @@index([releaseDate])
+  @@map("releases")
+}
+
+model Track {
+  id                  String          @id @default(uuid()) @db.Uuid
+  releaseId           String          @map("release_id") @db.Uuid
+  title               String          @db.VarChar(500)
+  isrc                String?         @unique @db.VarChar(12)
+  isrcLockedAt        DateTime?       @map("isrc_locked_at")
+  trackNumber         Int             @default(1) @map("track_number")
+  discNumber          Int             @default(1) @map("disc_number")
+  duration            Int?
+  artistId            String?         @map("artist_id") @db.Uuid
+  audioAssetId        String?         @map("audio_asset_id") @db.Uuid
+  videoAssetId        String?         @map("video_asset_id") @db.Uuid
+  thumbnailAssetId    String?         @map("thumbnail_asset_id") @db.Uuid
+  captionAssetId      String?         @map("caption_asset_id") @db.Uuid
+  captionLanguage     String?         @map("caption_language") @db.VarChar(35)
+  canvasAssetId       String?         @map("canvas_asset_id") @db.Uuid
+  motionAssetId       String?         @map("motion_asset_id") @db.Uuid
+  admAssetId          String?         @map("adm_asset_id") @db.Uuid
+  compositionId       String?         @map("composition_id") @db.Uuid
+  recordingLabelShare Decimal?        @map("recording_label_share") @db.Decimal(5, 2)
+  metadata            Json?
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+  release             Release         @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  artist              Artist?         @relation(fields: [artistId], references: [id], onDelete: SetNull)
+  composition         Composition?    @relation(fields: [compositionId], references: [id], onDelete: SetNull)
+  playlistTracks      PlaylistTrack[]
+
+  @@index([releaseId])
+  @@index([artistId])
+  @@index([videoAssetId])
+  @@index([compositionId])
+  @@map("tracks")
+}
+
+model Playlist {
+  id         String          @id @default(uuid()) @db.Uuid
+  name       String          @db.VarChar(200)
+  platform   String          @db.VarChar(100)
+  coverUrl   String?         @map("cover_url") @db.VarChar(2048)
+  followers  Int             @default(0)
+  plays      Int             @default(0)
+  color      String?         @db.VarChar(7)
+  externalId String?         @unique @map("external_id") @db.VarChar(255)
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+  tracks     PlaylistTrack[]
+
+  @@index([platform])
+  @@index([plays])
+  @@map("playlists")
+}
+
+model PlaylistTrack {
+  id         String   @id @default(uuid()) @db.Uuid
+  playlistId String   @map("playlist_id") @db.Uuid
+  trackId    String   @map("track_id") @db.Uuid
+  position   Int      @default(0)
+  addedAt    DateTime @default(now()) @map("added_at")
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, trackId])
+  @@index([playlistId])
+  @@index([trackId])
+  @@map("playlist_tracks")
+}
+
+model Composition {
+  id                   String         @id @default(uuid()) @db.Uuid
+  tenantId             String         @map("tenant_id") @db.Uuid
+  ownerId              String         @map("owner_id") @db.Uuid
+  title                String         @db.VarChar(500)
+  subtitle             String?        @db.VarChar(500)
+  alternativeTitle     String?        @map("alternative_title") @db.VarChar(500)
+  iswc                 String?        @unique @db.VarChar(15)
+  catalogueNumber      String?        @map("catalogue_number") @db.VarChar(128)
+  genre                String?        @db.VarChar(100)
+  creationDate         DateTime?      @map("creation_date")
+  lyricsLanguages      String?        @map("lyrics_languages") @db.VarChar(255)
+  territories          String         @default("WORLDWIDE") @db.VarChar(2048)
+  excludingTerritories String?        @map("excluding_territories") @db.VarChar(2048)
+  contractPeriodBegins DateTime?      @map("contract_period_begins")
+  contractPeriodEnds   DateTime?      @map("contract_period_ends")
+  contractNumber       String?        @map("contract_number") @db.VarChar(128)
+  authors              Json?
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+  tenant               BusinessEntity @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner                BusinessEntity @relation("CompositionOwner", fields: [ownerId], references: [id])
+  tracks               Track[]
+
+  @@unique([tenantId, title])
+  @@index([tenantId])
+  @@index([ownerId])
+  @@map("compositions")
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  eventId     String    @unique @map("event_id") @db.Uuid
+  version     Int       @default(1)
+  type        String    @db.VarChar(100)
+  occurredAt  DateTime  @default(now()) @map("occurred_at")
+  requestId   String    @map("request_id") @db.Uuid
+  actorId     String?   @map("actor_id") @db.Uuid
+  tenantId    String?   @map("tenant_id") @db.Uuid
+  entityPath  String?   @map("entity_path") @db.VarChar(2048)
+  payload     Json
+  publishedAt DateTime? @map("published_at")
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error") @db.VarChar(500)
+
+  @@index([publishedAt, occurredAt])
+  @@map("outbox_events")
+}
+
+model CatalogImport {
+  id                 String              @id @default(uuid()) @db.Uuid
+  assetId            String              @map("asset_id") @db.Uuid
+  tenantId           String              @map("tenant_id") @db.Uuid
+  ownerEntityId      String              @map("owner_entity_id") @db.Uuid
+  entityPath         String              @map("entity_path") @db.VarChar(2048)
+  actorId            String              @map("actor_id") @db.Uuid
+  requestId          String              @map("request_id") @db.Uuid
+  format             CatalogImportFormat
+  status             CatalogImportStatus @default(PENDING)
+  tokenCiphertext    String              @map("token_ciphertext") @db.Text
+  grantExpiresAt     DateTime            @map("grant_expires_at")
+  sourceFileName     String              @map("source_file_name") @db.VarChar(500)
+  sourceContentType  String              @map("source_content_type") @db.VarChar(255)
+  sourceSizeBytes    BigInt              @map("source_size_bytes")
+  archiveEntries     Json?               @map("archive_entries")
+  releaseCount       Int                 @default(0) @map("release_count")
+  trackCount         Int                 @default(0) @map("track_count")
+  lastError          String?             @map("last_error") @db.VarChar(1000)
+  completedAt        DateTime?           @map("completed_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  job                CatalogImportJob?
+
+  @@index([tenantId, createdAt])
+  @@index([ownerEntityId])
+  @@index([entityPath])
+  @@index([assetId])
+  @@index([status, createdAt])
+  @@map("catalog_imports")
+}
+
+model CatalogImportJob {
+  id          String                 @id @default(uuid()) @db.Uuid
+  importId    String                 @unique @map("import_id") @db.Uuid
+  status      CatalogImportJobStatus @default(PENDING)
+  attempts    Int                    @default(0)
+  availableAt DateTime               @default(now()) @map("available_at")
+  lockedAt    DateTime?              @map("locked_at")
+  lastError   String?                @map("last_error") @db.VarChar(1000)
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+  catalogImport CatalogImport        @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@map("catalog_import_jobs")
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "upload_intents" ALTER COLUMN "sha256" DROP NOT NULL;

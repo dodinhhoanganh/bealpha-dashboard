@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/media-prisma-v2"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AssetType {
+  AUDIO
+  VIDEO
+  CANVAS
+  MOTION
+  SUBTITLE
+  ARCHIVE
+  IMAGE
+}
+
+enum UploadStatus {
+  PENDING
+  UPLOADING
+  COMPLETE
+  FAILED
+  EXPIRED
+}
+
+enum AssetStatus {
+  PENDING
+  PROCESSING
+  READY
+  ERROR
+  ARCHIVED
+}
+
+enum JobType {
+  VALIDATE_ARCHIVE
+  INSPECT_MEDIA
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
+model UploadIntent {
+  id              String       @id @default(uuid()) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.Uuid
+  ownerEntityId   String       @map("owner_entity_id") @db.Uuid
+  ownerEntityPath String       @map("owner_entity_path") @db.VarChar(2048)
+  actorId         String       @map("actor_id") @db.Uuid
+  assetType       AssetType    @map("asset_type")
+  fileName        String       @map("file_name") @db.VarChar(255)
+  contentType     String       @map("content_type") @db.VarChar(255)
+  sizeBytes       BigInt       @map("size_bytes")
+  sha256          String?      @db.Char(64)
+  tokenHash       String       @unique @map("token_hash") @db.Char(64)
+  storageKey      String       @map("storage_key") @db.VarChar(1024)
+  releaseId       String?      @map("release_id") @db.Uuid
+  trackId         String?      @map("track_id") @db.Uuid
+  status          UploadStatus @default(PENDING)
+  expiresAt       DateTime     @map("expires_at")
+  consumedAt      DateTime?    @map("consumed_at")
+  failureCode     String?      @map("failure_code") @db.VarChar(100)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  asset           Asset?
+
+  @@index([tenantId, createdAt])
+  @@index([status, expiresAt])
+  @@map("upload_intents")
+}
+
+model Asset {
+  id              String         @id @default(uuid()) @db.Uuid
+  uploadIntentId  String         @unique @map("upload_intent_id") @db.Uuid
+  tenantId        String         @map("tenant_id") @db.Uuid
+  ownerEntityId   String         @map("owner_entity_id") @db.Uuid
+  ownerEntityPath String         @map("owner_entity_path") @db.VarChar(2048)
+  uploaderId      String         @map("uploader_id") @db.Uuid
+  type            AssetType
+  fileName        String         @map("file_name") @db.VarChar(255)
+  storageKey      String         @unique @map("storage_key") @db.VarChar(1024)
+  fileSize        BigInt         @map("file_size")
+  mimeType        String         @map("mime_type") @db.VarChar(255)
+  sha256          String         @db.Char(64)
+  releaseId       String?        @map("release_id") @db.Uuid
+  trackId         String?        @map("track_id") @db.Uuid
+  status          AssetStatus    @default(PENDING)
+  processingError String?        @map("processing_error") @db.VarChar(1000)
+  durationSeconds Int?           @map("duration_seconds")
+  sampleRate      Int?           @map("sample_rate")
+  bitRate         Int?           @map("bit_rate")
+  channels        Int?
+  bitDepth        Int?           @map("bit_depth")
+  codec           String?        @db.VarChar(100)
+  width           Int?
+  height          Int?
+  frameRate       Decimal?       @map("frame_rate") @db.Decimal(8, 3)
+  videoCodec      String?        @map("video_codec") @db.VarChar(100)
+  audioCodec      String?        @map("audio_codec") @db.VarChar(100)
+  qcProfile       String?        @map("qc_profile") @db.VarChar(64)
+  qcProfileVersion String?       @map("qc_profile_version") @db.VarChar(32)
+  qcResult        Json?          @map("qc_result")
+  qcValidatedAt   DateTime?      @map("qc_validated_at")
+  publishedAt     DateTime?      @map("published_at")
+  publishedById   String?        @map("published_by_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  processedAt     DateTime?      @map("processed_at")
+  uploadIntent    UploadIntent   @relation(fields: [uploadIntentId], references: [id], onDelete: Restrict)
+  streamGrants    StreamGrant[]
+  processingJob   ProcessingJob?
+  archiveEntries  ArchiveEntry[]  @relation("ArchiveSource")
+  archiveEntry    ArchiveEntry?    @relation("ArchiveMaterialized")
+
+  @@index([tenantId, createdAt])
+  @@index([ownerEntityId, createdAt])
+  @@index([ownerEntityPath])
+  @@index([releaseId])
+  @@index([trackId])
+  @@index([status])
+  @@index([publishedAt])
+  @@map("assets")
+}
+
+model ArchiveEntry {
+  id             String   @id @default(uuid()) @db.Uuid
+  archiveAssetId String   @map("archive_asset_id") @db.Uuid
+  assetId        String   @unique @map("asset_id") @db.Uuid
+  entryName      String   @map("entry_name") @db.VarChar(1024)
+  createdAt      DateTime @default(now()) @map("created_at")
+  archiveAsset   Asset    @relation("ArchiveSource", fields: [archiveAssetId], references: [id], onDelete: Cascade)
+  asset          Asset    @relation("ArchiveMaterialized", fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([archiveAssetId, entryName])
+  @@index([archiveAssetId])
+  @@map("archive_entries")
+}
+
+model StreamGrant {
+  id         String    @id @default(uuid()) @db.Uuid
+  assetId    String    @map("asset_id") @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  actorId    String    @map("actor_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.Char(64)
+  purpose    String    @default("PREVIEW") @db.VarChar(16)
+  maxUses    Int       @default(1) @map("max_uses")
+  useCount   Int       @default(0) @map("use_count")
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  asset      Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId, expiresAt])
+  @@index([expiresAt, consumedAt])
+  @@map("stream_grants")
+}
+
+model ProcessingJob {
+  id          String    @id @default(uuid()) @db.Uuid
+  assetId     String    @unique @map("asset_id") @db.Uuid
+  requestId   String    @map("request_id") @db.Uuid
+  type        JobType
+  status      JobStatus @default(PENDING)
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now()) @map("available_at")
+  lockedAt    DateTime? @map("locked_at")
+  lastError   String?   @map("last_error") @db.VarChar(1000)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  asset       Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@map("processing_jobs")
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  eventId     String    @unique @map("event_id") @db.Uuid
+  version     Int       @default(1)
+  type        String    @db.VarChar(100)
+  occurredAt  DateTime  @default(now()) @map("occurred_at")
+  requestId   String    @map("request_id") @db.Uuid
+  actorId     String?   @map("actor_id") @db.Uuid
+  tenantId    String?   @map("tenant_id") @db.Uuid
+  entityPath  String?   @map("entity_path") @db.VarChar(2048)
+  payload     Json
+  publishedAt DateTime? @map("published_at")
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error") @db.VarChar(500)
+
+  @@index([publishedAt, occurredAt])
+  @@map("outbox_events")
+}

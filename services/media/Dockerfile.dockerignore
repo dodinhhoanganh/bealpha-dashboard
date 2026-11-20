@@ -1,0 +1,16 @@
+**
+!packages/
+!packages/contracts/
+!packages/contracts/**
+!services/
+!services/media/
+!services/media/**
+**/node_modules
+**/dist
+**/src/generated*
+**/tests
+**/coverage
+**/*.bak*
+**/*.log
+**/*.tsbuildinfo
+**/.env*
