@@ -1,145 +1,301 @@
-<!DOCTYPE html>
-<html lang="en">
-
+<!doctype html>
+<html lang="en" data-theme="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>beAlpha - Music Distribution</title>
-    <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BeAlpha - Music Distribution Infrastructure</title>
+  <meta name="description" content="BeAlpha is music distribution infrastructure for labels, aggregators, and artists: catalog control, DDEX delivery, royalties, analytics, and secure media workflows.">
+  <meta property="og:title" content="BeAlpha - Music Distribution Infrastructure">
+  <meta property="og:description" content="A professional catalog, delivery, royalty, and analytics platform for modern music teams.">
+  <meta property="og:type" content="website">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
-
 <body>
+  <header class="site-header" data-header>
+    <div class="container nav-shell">
+      <a class="brand" href="index.html" aria-label="BeAlpha home">
+        <span class="brand-mark">BA</span>
+        <span class="brand-name">be<span>Alpha</span></span>
+      </a>
 
-    <!-- Header -->
-    <header>
-        <div class="container flex" style="justify-content: space-between;">
-            <a href="#" class="logo">
-                be<span>Alpha</span>
-            </a>
+      <nav class="nav-links" id="site-nav" aria-label="Primary navigation">
+        <a href="#platform" data-i18n="nav.platform">Platform</a>
+        <a href="#culture" data-i18n="nav.culture">Culture</a>
+        <a href="#workflow" data-i18n="nav.workflow">Workflow</a>
+        <a href="#security" data-i18n="nav.security">Security</a>
+        <a href="contact.html" data-i18n="nav.contact">Contact</a>
+      </nav>
 
-            <button class="mobile-toggle">☰</button>
+      <div class="nav-actions">
+        <label class="language-field" aria-label="Language">
+          <span class="material-symbols-rounded" aria-hidden="true">language</span>
+          <select data-language-select>
+            <option value="en">EN</option>
+            <option value="vi">VI</option>
+            <option value="ja">JA</option>
+            <option value="ko">KO</option>
+          </select>
+        </label>
+        <a class="button button-tonal nav-login" href="http://localhost:3000/login" data-dashboard-login data-i18n="nav.signIn">Sign in</a>
+        <button class="menu-button" type="button" aria-controls="site-nav" aria-expanded="false" data-menu-toggle>
+          <span class="material-symbols-rounded" aria-hidden="true">menu</span>
+        </button>
+      </div>
+    </div>
+  </header>
 
-            <nav class="nav-links flex">
-                <a href="#about">About</a>
-                <a href="#services">Services</a>
-                <a href="#">Technology</a>
-                <a href="#">Dashboard</a>
-                <a href="#">FAQ</a>
-                <a href="http://localhost:3000/login" class="btn btn-primary client-login-btn">Sign In</a>
-            </nav>
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <img class="hero-image" src="https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=2400&q=85" alt="">
+      <div class="hero-shade" aria-hidden="true"></div>
+
+      <div class="container hero-content">
+        <p class="section-kicker" data-i18n="hero.kicker">Music infrastructure for modern catalogs</p>
+        <h1 id="hero-title" data-i18n="hero.title">Move music from local scenes to global platforms.</h1>
+        <p class="hero-copy" data-i18n="hero.copy">BeAlpha gives labels, aggregators, and artists one clean operating system for catalog delivery, rights data, royalties, and audience insight.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="contact.html" data-i18n="hero.primary">Request access</a>
+          <a class="button button-secondary" href="#platform" data-i18n="hero.secondary">Explore platform</a>
         </div>
-    </header>
+      </div>
 
-    <!-- Hero Section -->
-    <section class="hero">
-        <div class="container hero-content">
-            <h1>PUBLISHING MUSIC HAS<br>NEVER BEEN SO EASY!</h1>
-            <p>We provide everything you need. Release your music to digital platforms, protect your copyright, and
-                manage your earnings with ease.</p>
-            <div class="flex hero-buttons">
-                <a href="#" class="btn btn-primary">Start Release</a>
-                <a href="#about" class="btn btn-outline">About Us</a>
-            </div>
+      <div class="container hero-console" aria-label="Platform preview">
+        <div class="console-header">
+          <span data-i18n="console.title">Live delivery desk</span>
+          <span class="console-status"><span aria-hidden="true"></span><span data-i18n="console.status">Operational</span></span>
         </div>
+        <div class="console-grid">
+          <div class="console-row">
+            <span class="status-pill status-blue" data-i18n="console.row1.status">Queued</span>
+            <strong data-i18n="console.row1.title">Midnight Saigon</strong>
+            <small data-i18n="console.row1.meta">Album - 12 tracks - DDEX ready</small>
+          </div>
+          <div class="console-row">
+            <span class="status-pill status-green" data-i18n="console.row2.status">Delivered</span>
+            <strong data-i18n="console.row2.title">Seoul Afterhours</strong>
+            <small data-i18n="console.row2.meta">Single - receipts confirmed</small>
+          </div>
+          <div class="console-row">
+            <span class="status-pill status-amber" data-i18n="console.row3.status">Review</span>
+            <strong data-i18n="console.row3.title">Lagos Signal</strong>
+            <small data-i18n="console.row3.meta">Metadata QC pending</small>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <!-- Services Section -->
-    <section class="section" id="services">
-        <div class="container">
-            <h2 class="section-title">EVERYTHING YOU NEED</h2>
-            <div class="grid services-grid">
-                <div class="service-card">
-                    <div class="service-icon"><i class="fas fa-music"></i></div>
-                    <h3>Release Your Music</h3>
-                    <p>We release your music to over 30 digital platforms worldwide, bringing your art to over 7 billion
-                        people.</p>
-                </div>
-                <div class="service-card">
-                    <div class="service-icon"><i class="fas fa-shield-alt"></i></div>
-                    <h3>Copyright Protection</h3>
-                    <p>All your works are protected by digital copyright. Receive money from digital rights securely.
-                    </p>
-                </div>
-                <div class="service-card">
-                    <div class="service-icon"><i class="fas fa-tachometer-alt"></i></div>
-                    <h3>Easy Management</h3>
-                    <p>We provide you with a powerful dashboard to manage your catalog and analytics in the easiest way
-                        possible.</p>
-                </div>
-            </div>
-        </div>
+    <section class="platform-strip">
+      <div class="container strip-inner">
+        <span data-i18n="strip.label">Designed for catalogs moving across</span>
+        <ul aria-label="Supported channels">
+          <li>Spotify</li>
+          <li>Apple Music</li>
+          <li>YouTube Music</li>
+          <li>Vevo</li>
+          <li>TikTok</li>
+          <li>Deezer</li>
+        </ul>
+      </div>
     </section>
 
-    <!-- Parallax Section -->
-    <section class="parallax-section">
-        <div class="container parallax-content">
-            <h2>FOUNDED BY CREATORS, FOR CREATORS</h2>
-            <p>beAlpha (formerly iMir) was established to help artists, singers, and producers succeed in the digital
-                era.</p>
-            <br>
-            <a href="#" class="btn btn-outline">Join Us Now</a>
+    <section class="section" id="platform">
+      <div class="container">
+        <div class="section-heading reveal">
+          <p class="section-kicker" data-i18n="platform.kicker">Dashboard-aligned public experience</p>
+          <h2 data-i18n="platform.title">The same control-room language as the BeAlpha dashboard.</h2>
+          <p data-i18n="platform.copy">Dark, focused, operational, and built for repeated use. The public site now shares the product rhythm: clean surfaces, precise icons, blue state accents, and concise interface copy.</p>
         </div>
+
+        <div class="feature-grid">
+          <article class="feature-card reveal">
+            <span class="material-symbols-rounded" aria-hidden="true">library_music</span>
+            <h3 data-i18n="features.catalog.title">Catalog command</h3>
+            <p data-i18n="features.catalog.copy">Manage releases, assets, identifiers, territories, and delivery state without fragmenting work across spreadsheets.</p>
+          </article>
+          <article class="feature-card reveal">
+            <span class="material-symbols-rounded" aria-hidden="true">route</span>
+            <h3 data-i18n="features.delivery.title">Delivery routing</h3>
+            <p data-i18n="features.delivery.copy">Package releases, validate metadata, dispatch to partners, and surface receipts back to operators.</p>
+          </article>
+          <article class="feature-card reveal">
+            <span class="material-symbols-rounded" aria-hidden="true">payments</span>
+            <h3 data-i18n="features.royalty.title">Royalty clarity</h3>
+            <p data-i18n="features.royalty.copy">Cascade revenue through distributors, label groups, labels, and artists with transparent statement logic.</p>
+          </article>
+          <article class="feature-card reveal">
+            <span class="material-symbols-rounded" aria-hidden="true">monitoring</span>
+            <h3 data-i18n="features.insight.title">Audience insight</h3>
+            <p data-i18n="features.insight.copy">Track catalog momentum by release, market, playlist, and account without exposing another tenant's data.</p>
+          </article>
+        </div>
+      </div>
     </section>
 
-    <!-- About Section (New) -->
-    <section class="section" id="about" style="background: var(--surface-color);">
-        <div class="container">
-            <div style="max-width: 800px; margin: 0 auto; text-align: center;">
-                <h2 class="section-title">ABOUT US</h2>
-                <p style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 20px;">
-                    beAlpha is a record label, founded in 2020. We were established with the purpose of helping artists,
-                    singers, musicians, and music producers in the field of digital distribution and copyright.
-                </p>
-                <p style="font-size: 1.1rem; color: var(--text-secondary);">
-                    As a label under ADED Music Group LLC, we have strong relationships with global partners. We release
-                    your music worldwide and bring your sound to the global stage.
-                </p>
-            </div>
+    <section class="section section-surface" id="culture">
+      <div class="container culture-layout">
+        <div class="culture-copy reveal">
+          <p class="section-kicker" data-i18n="culture.kicker">Cultural reach</p>
+          <h2 data-i18n="culture.title">Built for music scenes, not only music files.</h2>
+          <p data-i18n="culture.copy">The interface respects how catalogs actually grow: regional languages, local release timing, multi-role teams, and artists who need their work to travel without losing context.</p>
+          <a class="button button-secondary" href="contact.html" data-i18n="culture.cta">Talk to BeAlpha</a>
         </div>
+        <div class="culture-board reveal" aria-label="Cultural operating map">
+          <img src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=1200&q=85" alt="">
+          <div class="scene-list">
+            <div>
+              <span>01</span>
+              <strong data-i18n="culture.scene1.title">Saigon releases</strong>
+              <small data-i18n="culture.scene1.copy">Vietnamese-first metadata and label workflows.</small>
+            </div>
+            <div>
+              <span>02</span>
+              <strong data-i18n="culture.scene2.title">Seoul collaborations</strong>
+              <small data-i18n="culture.scene2.copy">Multi-artist credits and territory-aware scheduling.</small>
+            </div>
+            <div>
+              <span>03</span>
+              <strong data-i18n="culture.scene3.title">Global catalog desks</strong>
+              <small data-i18n="culture.scene3.copy">One operating layer for teams across time zones.</small>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <!-- Footer -->
-    <footer>
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-brand">
-                    <h2>be<span>Alpha</span></h2>
-                    <p>Publishing music has never been so easy.</p>
-                </div>
-                <div class="footer-col">
-                    <h4>Company</h4>
-                    <ul>
-                        <li><a href="#about">About Us</a></li>
-                        <li><a href="#">Our Team</a></li>
-                        <li><a href="#">Contact</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h4>Actions</h4>
-                    <ul>
-                        <li><a href="#">Sign Up</a></li>
-                        <li><a href="login.html">Sign In</a></li>
-                        <li><a href="#">FAQ</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h4>Connect</h4>
-                    <ul>
-                        <li><a href="#">Facebook</a></li>
-                        <li><a href="#">Instagram</a></li>
-                        <li><a href="#">YouTube</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                &copy; <span id="current-year"></span> beAlpha. All Rights Reserved.
-            </div>
+    <section class="section" id="workflow">
+      <div class="container">
+        <div class="section-heading reveal">
+          <p class="section-kicker" data-i18n="workflow.kicker">Workflow</p>
+          <h2 data-i18n="workflow.title">A practical path from master to statement.</h2>
         </div>
-    </footer>
 
-    <script src="script.js"></script>
+        <ol class="workflow">
+          <li class="reveal">
+            <span class="step-number">01</span>
+            <div>
+              <h3 data-i18n="workflow.step1.title">Upload</h3>
+              <p data-i18n="workflow.step1.copy">Bring in audio, video, artwork, and supporting files through secure media endpoints.</p>
+            </div>
+          </li>
+          <li class="reveal">
+            <span class="step-number">02</span>
+            <div>
+              <h3 data-i18n="workflow.step2.title">Check</h3>
+              <p data-i18n="workflow.step2.copy">Validate identifiers, credits, release timing, territories, and package readiness.</p>
+            </div>
+          </li>
+          <li class="reveal">
+            <span class="step-number">03</span>
+            <div>
+              <h3 data-i18n="workflow.step3.title">Deliver</h3>
+              <p data-i18n="workflow.step3.copy">Generate delivery packages, route them, and keep the operator informed with status changes.</p>
+            </div>
+          </li>
+          <li class="reveal">
+            <span class="step-number">04</span>
+            <div>
+              <h3 data-i18n="workflow.step4.title">Measure</h3>
+              <p data-i18n="workflow.step4.copy">Read performance by release, market, playlist, and catalog owner.</p>
+            </div>
+          </li>
+          <li class="reveal">
+            <span class="step-number">05</span>
+            <div>
+              <h3 data-i18n="workflow.step5.title">Pay</h3>
+              <p data-i18n="workflow.step5.copy">Convert reports into clear royalty statements for every tier of the supply chain.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section section-surface" id="security">
+      <div class="container product-layout">
+        <div class="product-panel reveal">
+          <div class="panel-top">
+            <span data-i18n="product.title">Catalog health</span>
+            <span class="material-symbols-rounded" aria-hidden="true">verified_user</span>
+          </div>
+          <div class="metric-row">
+            <div>
+              <strong>98.7%</strong>
+              <span data-i18n="product.metric1">metadata pass rate</span>
+            </div>
+            <div>
+              <strong>31</strong>
+              <span data-i18n="product.metric2">delivery targets</span>
+            </div>
+          </div>
+          <div class="health-list">
+            <div><span></span><p data-i18n="product.item1">Signed streams for unreleased media</p></div>
+            <div><span></span><p data-i18n="product.item2">Tenant scoped catalog visibility</p></div>
+            <div><span></span><p data-i18n="product.item3">Audit trail for delivery actions</p></div>
+          </div>
+        </div>
+        <div class="product-copy reveal">
+          <p class="section-kicker" data-i18n="security.kicker">Security and trust</p>
+          <h2 data-i18n="security.title">Designed for unreleased music and financial data.</h2>
+          <p data-i18n="security.copy">BeAlpha treats catalog media, rights metadata, and royalty records as sensitive infrastructure. Public design now mirrors that posture: restrained, readable, and enterprise-ready.</p>
+          <div class="trust-points">
+            <div>
+              <span class="material-symbols-rounded" aria-hidden="true">lock</span>
+              <p data-i18n="security.point1">Short-lived media access</p>
+            </div>
+            <div>
+              <span class="material-symbols-rounded" aria-hidden="true">account_tree</span>
+              <p data-i18n="security.point2">Hierarchy-aware permissions</p>
+            </div>
+            <div>
+              <span class="material-symbols-rounded" aria-hidden="true">history_edu</span>
+              <p data-i18n="security.point3">Action-level audit history</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-section">
+      <div class="container cta-inner reveal">
+        <h2 data-i18n="cta.title">Bring your catalog into a cleaner operating layer.</h2>
+        <p data-i18n="cta.copy">Request access for your label, aggregator, or artist team. BeAlpha will review the fit and respond with the next step.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="contact.html" data-i18n="cta.primary">Request access</a>
+          <a class="button button-secondary" href="http://localhost:3000/login" data-dashboard-login data-i18n="cta.secondary">Dashboard sign in</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <div>
+        <a class="brand footer-brand" href="index.html">
+          <span class="brand-mark">BA</span>
+          <span class="brand-name">be<span>Alpha</span></span>
+        </a>
+        <p data-i18n="footer.copy">Music distribution infrastructure for catalog teams, labels, and artists.</p>
+      </div>
+      <div>
+        <h3 data-i18n="footer.platform">Platform</h3>
+        <a href="#platform" data-i18n="nav.platform">Platform</a>
+        <a href="#workflow" data-i18n="nav.workflow">Workflow</a>
+        <a href="#security" data-i18n="nav.security">Security</a>
+      </div>
+      <div>
+        <h3 data-i18n="footer.company">Company</h3>
+        <a href="contact.html" data-i18n="nav.contact">Contact</a>
+        <a href="http://localhost:3000/login" data-dashboard-login data-i18n="nav.signIn">Sign in</a>
+      </div>
+    </div>
+    <div class="container footer-bottom">
+      <span>&copy; <span id="current-year"></span> BEALPHA MUSIC GROUP LLC.</span>
+      <span data-i18n="footer.rights">All rights reserved.</span>
+    </div>
+  </footer>
+
+  <script src="script.js" defer></script>
 </body>
-
 </html>
